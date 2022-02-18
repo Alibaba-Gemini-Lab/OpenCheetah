@@ -4,7 +4,7 @@ The codes are still under heavy developments, and **should not** be used in any 
 
 ### Repo Directory Description
 - `include/` Contains implementation of Cheetah's linear protocols.
-- `SCI/` A fork of CrytoFlow2's SCI library and contains implementation of Cheetah's non-linear protocols.
+- `SCI/` A fork of CryptFlow2's SCI library and contains implementation of Cheetah's non-linear protocols.
 - `networks/` Auto-generated cpp programs that evaluate some neural networks.
 - `pretrained/` Pretrained neural networks and inputs.
 - `patch/` Patches applied to the dependent libraries.
@@ -15,10 +15,10 @@ The codes are still under heavy developments, and **should not** be used in any 
 
 * openssl 
 * c++ compiler (>= 8.0 for the better performance on AVX512)
-* cmake >= 3.10
+* cmake >= 3.13
 * git
 * make
-* OpenMP (optional, only needed by CrytoFlow2 for multi-threading)
+* OpenMP (optional, only needed by CryptFlow2 for multi-threading)
 
 ### Building Dependencies
 * Run `bash scripts/build-deps.sh` which will build the following dependencies
@@ -33,8 +33,9 @@ The codes are still under heavy developments, and **should not** be used in any 
 * Build has passed on the following setting
   * MacOS 11.6 with clang 13.0.0, Intel Core i5, cmake 3.22.1
   * Red Hat 7.2.0 with gcc 7.2.1, Intel(R) Xeon(R), cmake 3.12.0
-  * Ubuntu 7.5.0 with gcc 7.5.0 Intel(R) Xeon(R),  cmake 3.19.0
-
+  * Ubuntu 18.04 with gcc 7.5.0 Intel(R) Xeon(R),  cmake 3.13
+  * Ubuntu 20.04 with gcc 9.4.0 Intel(R) Xeon(R),  cmake 3.16.3
+  
 ### Building Cheetah and SCI-HE Demo
 
 * Run `bash scripts/build.sh` which will build 6 executables in the `build/bin` folder
@@ -50,7 +51,7 @@ The codes are still under heavy developments, and **should not** be used in any 
 1. On one terminal run `bash scripts/run-server.sh cheetah sqnet`. The program will load the pretrained model in the folder `pretrained/` which might takes some time when the pretrained model is huge. 
 
 2. On other terminal run `bash scripts/run-client.sh cheetah sqnet`. The program will  load the prepared input image in the folder `pretrained`.  
-   * replace `cheetah` by `SCI_HE` to execute the CrytoFlow2's counterpart.
+   * replace `cheetah` by `SCI_HE` to execute the CryptFlow2's counterpart.
    * replace `sqnet` by `resnet50` to run on the ResNet50 model.
 
 You can change the `SERVER_IP` and `SERVER_PORT` defined in the [scripts/common.sh](scripts/common.sh) to run the demo remotely.
