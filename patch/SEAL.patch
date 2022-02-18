@@ -1,16 +1,7 @@
 diff --git a/CMakeLists.txt b/CMakeLists.txt
-index 0039517..7f17ccf 100644
+index 0039517..17ac79f 100644
 --- a/CMakeLists.txt
 +++ b/CMakeLists.txt
-@@ -1,7 +1,7 @@
- # Copyright (c) Microsoft Corporation. All rights reserved.
- # Licensed under the MIT license.
-
--cmake_minimum_required(VERSION 3.13)
-+cmake_minimum_required(VERSION 3.10)
-
- ###################################################
- # Project SEAL includes the following components: #
 @@ -223,7 +223,7 @@ if(SEAL_USE_INTEL_HEXL)
          message(STATUS "Intel HEXL: download ...")
          seal_fetch_thirdparty_content(ExternalIntelHEXL)
