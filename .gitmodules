@@ -1,0 +1,18 @@
+[submodule "deps/zstd"]
+	path = deps/zstd
+	url = https://github.com/facebook/zstd.git
+[submodule "deps/emp-ot"]
+	path = deps/emp-ot
+	url = https://github.com/emp-toolkit/emp-ot.git
+[submodule "deps/hexl"]
+	path = deps/hexl
+	url = https://github.com/intel/hexl.git
+[submodule "deps/SEAL"]
+	path = deps/SEAL
+	url = https://github.com/microsoft/SEAL.git
+[submodule "deps/eigen"]
+	path = deps/eigen
+	url = https://github.com/libigl/eigen.git
+[submodule "deps/emp-tool"]
+	path = deps/emp-tool
+	url = https://github.com/emp-toolkit/emp-tool.git

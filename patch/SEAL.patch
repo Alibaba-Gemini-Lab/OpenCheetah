@@ -1,0 +1,31 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 0039517..7f17ccf 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -1,7 +1,7 @@
+ # Copyright (c) Microsoft Corporation. All rights reserved.
+ # Licensed under the MIT license.
+
+-cmake_minimum_required(VERSION 3.13)
++cmake_minimum_required(VERSION 3.10)
+
+ ###################################################
+ # Project SEAL includes the following components: #
+@@ -223,7 +223,7 @@ if(SEAL_USE_INTEL_HEXL)
+         message(STATUS "Intel HEXL: download ...")
+         seal_fetch_thirdparty_content(ExternalIntelHEXL)
+     else()
+-        find_package(HEXL 1.2.3)
++        find_package(HEXL 1.2.2)
+         if (NOT TARGET HEXL::hexl)
+             message(FATAL_ERROR "Intel HEXL: not found")
+         endif()
+@@ -418,7 +418,7 @@ if(NOT BUILD_SHARED_LIBS)
+             add_dependencies(seal HEXL::hexl)
+             target_include_directories(seal PRIVATE
+                 $<BUILD_INTERFACE:$<TARGET_PROPERTY:HEXL::hexl,INTERFACE_INCLUDE_DIRECTORIES>>)
+-            target_compile_options(seal PRIVATE $<TARGET_PROPERTY:HEXL::hexl,INTERFACE_COMPILE_OPTIONS>)
++            #target_compile_options(seal PRIVATE $<TARGET_PROPERTY:HEXL::hexl,INTERFACE_COMPILE_OPTIONS>)
+             get_target_property(HEXL_INTERFACE_LINK_OPTIONS HEXL::hexl INTERFACE_LINK_OPTIONS)
+             if (NOT "${HEXL_INTERFACE_LINK_OPTIONS}" STREQUAL "HEXL_INTERFACE_LINK_OPTIONS-NOTFOUND")
+                 target_link_libraries(seal INTERFACE ${HEXL_INTERFACE_LINK_OPTIONS})

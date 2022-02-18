@@ -1,0 +1,15 @@
+diff --git a/cmake/ExternalIntelHEXL.cmake b/cmake/ExternalIntelHEXL.cmake
+index 3b694f9..513d171 100644
+--- a/cmake/ExternalIntelHEXL.cmake
++++ b/cmake/ExternalIntelHEXL.cmake
+@@ -25,8 +25,11 @@ if(NOT hexl_POPULATED)
+     mark_as_advanced(FETCHCONTENT_SOURCE_DIR_HEXL)
+     mark_as_advanced(FETCHCONTENT_UPDATES_DISCONNECTED_HEXL)
+
++    execute_process(COMMAND patch ${hexl_SOURCE_DIR}/cmake/cpu-features/CMakeLists.txt.in ${CMAKE_SOURCE_DIR}/../../patch/HEXL.patch)
++
+     add_subdirectory(
+         ${hexl_SOURCE_DIR}
+         EXCLUDE_FROM_ALL
+     )
++    include_directories(${hexl_SOURCE_DIR}/hexl/include/)
