@@ -37,11 +37,13 @@ The codes are still under heavy developments, and **should not** be used in any 
 
 ### Building Cheetah and SCI-HE Demo
 
-* Run `bash scripts/build.sh` which will build 4 executables in the `build/bin` folder
+* Run `bash scripts/build.sh` which will build 6 executables in the `build/bin` folder
 	* `resnet50-cheetah` 
 	* `sqnet-cheetah`
+	* `densenet121-cheetah`
 	* `resnet50-SCI_HE`
 	* `sqnet-SCI_HE`
+	* `densenet121-SCI_HE`
 
 ### Local Demo 
 
