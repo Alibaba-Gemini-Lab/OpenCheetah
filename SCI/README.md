@@ -1,6 +1,6 @@
 # NOTES
-The codes under this directory are based on the [SCI](https://github.com/mpc-msri/EzPC/tree/master/SCI) project.
-In Cheetah, we (authors of Cheetah) have implemented efficient OT primitives based on the [Ferret](https://github.com/emp-toolkit/emp-ot/tree/master/emp-ot/ferret) library. See [this](src/OT/ferret/silent_ot.h) for example. Also, we replace some underlying implementations for the linear functions, see [this](src/library_fixed_uniform_cheetah.cpp).
+The codes under this directory are based on the SCI library of Microsoft's [EzPC](https://github.com/mpc-msri/EzPC) project.
+We (authors of Cheetah) additionally implemented efficient OT primitives based on the [Ferret](https://github.com/emp-toolkit/emp-ot/tree/master/emp-ot/ferret) library. See [this](src/OT/ferret/silent_ot.h) for example. Also, we replace some underlying implementations for the linear functions, see [this](src/library_fixed_uniform_cheetah.cpp).
 In addition, we have clean up some codes in the origin SCI repo for our uses. 
 
 # Secure and Correct Inference (SCI) Library
