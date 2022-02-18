@@ -7283,5 +7283,4 @@ int main(int argc, char **argv) {
 	  printf("predicted label=%lld\n", pred);
 	}
   }
-  finalize();
 }

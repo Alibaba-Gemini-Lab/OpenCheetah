@@ -8,7 +8,8 @@ The codes are still under heavy developments, and **should not** be used in any 
 - `networks/` Auto-generated cpp programs that evaluate some neural networks.
 - `pretrained/` Pretrained neural networks and inputs.
 - `patch/` Patches applied to the dependent libraries.
-- `credits` Licenses of the dependencies. 
+- `credits/` Licenses of the dependencies. 
+- `scripts/` Helper scripts used to build the programs in this repo.
 
 ### Requirements
 
@@ -17,7 +18,7 @@ The codes are still under heavy developments, and **should not** be used in any 
 * cmake >= 3.10
 * git
 * make
-* OpenMP (needed by CrytoFlow2 for multi-threading)
+* OpenMP (optional, only needed by CrytoFlow2 for multi-threading)
 
 ### Building Dependencies
 * Run `bash scripts/build-deps.sh` which will build the following dependencies
@@ -50,11 +51,11 @@ The codes are still under heavy developments, and **should not** be used in any 
    * replace `cheetah` by `SCI_HE` to execute the CrytoFlow2's counterpart.
    * replace `sqnet` by `resnet50` to run on the ResNet50 model.
 
-You can change the `SERVER_IP` and `SERVER_PORT` defined in `common.sh` to run the demo remotely.
+You can change the `SERVER_IP` and `SERVER_PORT` defined in the [scripts/common.sh](scripts/common.sh) to run the demo remotely.
 Also, you can use our throttle script to mimic a remote network condition within one Linux machine, see below.
 
 ### Mimic an WAN setting within LAN on Linux
 
-* To use the throttle script under `scripts/throttle.sh` to limit the network speed and ping latency (require `sudo`)
+* To use the throttle script under [scripts/throttle.sh](scripts/throttle.sh) to limit the network speed and ping latency (require `sudo`)
 * For example, run `sudo scripts/throttle.sh wan` on a Linux OS which will limit the local-loop interface to about 400Mbps bandwidth and 40ms ping latency.
   You can check the ping latency by just `ping 127.0.0.1`. The bandwidth can be check using extra `iperf` command.
