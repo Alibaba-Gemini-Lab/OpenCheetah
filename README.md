@@ -1,5 +1,5 @@
 # Cheetah: Lean and Fast Secure Two-Party Deep Neural Network Inference
-This repo contains a proof-of-concept implementation for our [Cheetah paper].
+This repo contains a proof-of-concept implementation for our [Cheetah paper](https://eprint.iacr.org/2022/207.pdf).
 The codes are still under heavy developments, and **should not** be used in any security sensitive product.
 
 ### Repo Directory Description
