@@ -191,14 +191,7 @@ Code HomConv2DSS::encryptImage(
   ENSURE_OR_RETURN(context_ && encryptor_ && tencoder_, Code::ERR_CONFIG);
   ENSURE_OR_RETURN(img.shape().IsSameSize(meta.ishape), Code::ERR_DIM_MISMATCH);
 
-  // NOTE(wen-jie): `encode_role` is used for CKKS scheme and
-  const bool is_ckks = scheme() == seal::scheme_type::ckks;
   TensorEncoder::Role encode_role = TensorEncoder::Role::none;
-  if (is_ckks) {
-    encode_role = meta.is_shared_input ? TensorEncoder::Role::encryptor
-                                       : TensorEncoder::Role::encoder;
-  }
-
   std::vector<seal::Plaintext> polys;
   CHECK_ERR(tencoder_->EncodeImageShare(encode_role, img, meta.fshape,
                                         meta.padding, meta.stride,
@@ -206,28 +199,6 @@ Code HomConv2DSS::encryptImage(
             "encryptImage");
 
   ThreadPool tpool(std::min(std::max(1UL, nthreads), kMaxThreads));
-
-  if (is_ckks) {
-    auto cntxt = context_->get_context_data(polys.front().parms_id());
-    auto ntt_tables = cntxt->small_ntt_tables();
-    const size_t L = cntxt->parms().coeff_modulus().size();
-    const size_t N = poly_degree();
-
-    auto ntt_program = [&](long wid, size_t start, size_t end) {
-      for (size_t i = start; i < end; ++i) {
-        size_t poly_idx = i / L;
-        size_t prime_idx = i % L;
-
-        uint64_t *poly_ptr = polys[poly_idx].data() + prime_idx * N;
-        seal::util::ntt_negacyclic_harvey(poly_ptr, ntt_tables[prime_idx]);
-      }
-      return Code::OK;
-    };
-    // CKKS require NTT-form of plaintexts
-    CHECK_ERR(LaunchWorks(tpool, L * polys.size(), ntt_program),
-              "encryptImage");
-  }
-
   seal::Serializable<seal::Ciphertext> dummy = encryptor_->encrypt_zero();
   encrypted_img.resize(polys.size(), dummy);
   auto encrypt_program = [&](long wid, size_t start, size_t end) {
@@ -250,31 +221,7 @@ Code HomConv2DSS::encodeImage(const Tensor<uint64_t> &img, const Meta &meta,
                                         meta.fshape, meta.padding, meta.stride,
                                         /*to_ntt*/ false, encoded_img),
             "HomConv2DSS::encryptImage: encode failed");
-
-  if (scheme() == seal::scheme_type::ckks) {
-    // CKKS requires NTT-form of plaintexts
-    auto ntt_program = [&](long wid, size_t start, size_t end) {
-      for (size_t i = start; i < end; ++i) {
-        auto cntxt = context_->get_context_data(encoded_img[i].parms_id());
-        if (!cntxt) {
-          LOG(FATAL) << "invaid parms_id()";
-        }
-        auto ntt_tables = cntxt->small_ntt_tables();
-        const size_t L = cntxt->parms().coeff_modulus().size();
-        const size_t N = cntxt->parms().poly_modulus_degree();
-        uint64_t *poly_ptr = encoded_img[i].data();
-        for (size_t j = 0; j < L; ++j, poly_ptr += N) {
-          seal::util::ntt_negacyclic_harvey(poly_ptr, ntt_tables[j]);
-        }
-      }
-      return Code::OK;
-    };
-
-    ThreadPool tpool(std::min(std::max(1UL, nthreads), kMaxThreads));
-    return LaunchWorks(tpool, encoded_img.size(), ntt_program);
-  } else {
-    return Code::OK;
-  }
+  return Code::OK;
 }
 
 Code HomConv2DSS::encodeFilters(
@@ -480,77 +427,20 @@ Code HomConv2DSS::sampleRandomMask(const std::vector<size_t> &targets,
 
   auto parms = cntxt_data->parms();
 
-  if (scheme() != seal::scheme_type::ckks) {
-    mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
-    mask.resize(N);
-
-    auto prng = parms.random_generator()->create();
-    const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
-    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
-
-    // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
-    modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
-                       mask.data());
-
-    auto coeff_ptr = coeffs_buff;
-    for (size_t idx : targets) {
-      *coeff_ptr++ = mask[idx];
-    }
-    return Code::OK;
-  }
-
-  ENSURE_OR_RETURN(parms.coeff_modulus().size() == 2, Code::ERR_INTERNAL);
-  constexpr size_t nlimbs = 2;
-
-  // CKKS require ModSwitch
-  const size_t nbytes = mul_safe(targets.size(), nlimbs, sizeof(uint64_t));
   mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
-  mask.resize(mul_safe(nlimbs, N));
-  mask.parms_id() = pid;
-  std::fill_n(mask.data(), mask.coeff_count(), 0);
+  mask.resize(N);
 
-  // sample random from [0, 2^nlimbs)
   auto prng = parms.random_generator()->create();
+  const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
   prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
-  U64 *big_int_bgn = mask.data();
-  U64 *big_int_end = big_int_bgn + targets.size() * nlimbs;
-  // adjust from [0, 2^128) -> [0, q)
-  const uint64_t q_mask = cntxt_data->total_coeff_modulus()[nlimbs - 1];
-  for (auto big_int = big_int_bgn; big_int < big_int_end; big_int += nlimbs) {
-    big_int[nlimbs - 1] &= q_mask;
-  }
 
-  auto big_Q = cntxt_data->total_coeff_modulus();
-  auto half_Q = cntxt_data->upper_half_threshold();
-  // x \in [0, q) -> 2^64
-  for (auto big_int = big_int_bgn; big_int < big_int_end; big_int += nlimbs) {
-    using namespace seal::util;
-    if (is_greater_than_or_equal_uint(big_int, half_Q, 2)) {
-      U64 tmp[2];
-      sub_uint(big_int, 2, big_Q, 2, 0, 2, tmp);
-      *coeffs_buff++ = tmp[0];
-    } else {
-      *coeffs_buff++ = big_int[0];
-    }
-  }
+  // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
+  modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
+                     mask.data());
 
-  // BigInt to RNS
-  auto mem_pool = seal::MemoryManager::GetPool();
-  auto rns_tool = cntxt_data->rns_tool();
-  std::fill(big_int_end, mask.data() + mask.coeff_count(), 0);
-  rns_tool->base_q()->decompose_array(big_int_bgn, N, mem_pool);
-
-  auto ntt_tables = cntxt_data->small_ntt_tables();
-  for (size_t l = 0; l < nlimbs; ++l) {
-    auto pt_ptr = mask.data() + l * N;
-    // ascending order
-    for (long i = targets.size() - 1; i >= 0; --i) {
-      pt_ptr[targets[i]] = pt_ptr[i];
-    }
-
-    if (is_ntt) {
-      ntt_negacyclic_harvey(pt_ptr, ntt_tables[l]);
-    }
+  auto coeff_ptr = coeffs_buff;
+  for (size_t idx : targets) {
+    *coeff_ptr++ = mask[idx];
   }
   return Code::OK;
 }
@@ -583,7 +473,6 @@ Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
   }
 
   mask_tensor.Reshape(GetConv2DOutShape(meta));
-  const bool is_ckks = scheme() == seal::scheme_type::ckks;
   auto mask_program = [&](long wid, size_t start, size_t end) {
     RLWEPt mask;
     TensorShape slice_shape;
@@ -606,22 +495,11 @@ Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
                                this_ct.parms_id(), this_ct.is_ntt_form()),
               "RandomMaskPoly");
 
-          if (is_ckks && !this_ct.is_ntt_form()) {
-            // foo SEAL for adding CKKS ct under non-ntt form
-            this_ct.is_ntt_form() = true;
-            mask.scale() = this_ct.scale();
-            evaluator_->sub_plain_inplace(this_ct, mask);
-            this_ct.is_ntt_form() = false;
-          } else {
-            evaluator_->sub_plain_inplace(this_ct, mask);
-          }
+          evaluator_->sub_plain_inplace(this_ct, mask);
 
-          if (!is_ckks) {
-            // BFV/BGV can drop all but keep one modulus
-            // NOTICE(wen-jie): the mod switch should placed AFTER the sub
-            evaluator_->mod_switch_to_inplace(this_ct,
-                                              context_->last_parms_id());
-          }
+          // BFV/BGV can drop all but keep one modulus
+          // NOTICE(wen-jie): the mod switch should placed AFTER the sub
+          evaluator_->mod_switch_to_inplace(this_ct, context_->last_parms_id());
 
           auto coeff_ptr = coeffs.data();
           for (long h = 0; h < slice_shape.height(); ++h) {

@@ -530,28 +530,26 @@ Code HomFCSS::sampleRandomMask(const std::vector<size_t> &targets,
   }
 
   auto parms = cntxt_data->parms();
-  if (scheme() != seal::scheme_type::ckks) {
-    mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
-    mask.resize(N);
+  mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
+  mask.resize(N);
 
-    auto prng = parms.random_generator()->create();
-    const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
-    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
+  auto prng = parms.random_generator()->create();
+  const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
+  prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
 
-    if (IsTwoPower(plain_modulus())) {
-      uint64_t mod_mask = plain_modulus() - 1;
-      std::transform(mask.data(), mask.data() + mask.coeff_count(), mask.data(),
-                     [mod_mask](uint64_t u) { return u & mod_mask; });
-    } else {
-      // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
-      modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
-                         mask.data());
-    }
+  if (IsTwoPower(plain_modulus())) {
+    uint64_t mod_mask = plain_modulus() - 1;
+    std::transform(mask.data(), mask.data() + mask.coeff_count(), mask.data(),
+                   [mod_mask](uint64_t u) { return u & mod_mask; });
+  } else {
+    // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
+    modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
+                       mask.data());
+  }
 
-    auto coeff_ptr = coeffs_buff;
-    for (size_t idx : targets) {
-      *coeff_ptr++ = mask[idx];
-    }
+  auto coeff_ptr = coeffs_buff;
+  for (size_t idx : targets) {
+    *coeff_ptr++ = mask[idx];
   }
   return Code::OK;
 }
