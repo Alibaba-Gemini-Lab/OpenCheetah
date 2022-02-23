@@ -2,13 +2,13 @@
 #ifndef GEMINI_CHEETAH_HOMCONVSS_H_
 #define GEMINI_CHEETAH_HOMCONVSS_H_
 #include <seal/secretkey.h>
+#include <seal/serializable.h>
 
 #include <optional>
 #include <vector>
 
 #include "gemini/cheetah/tensor.h"
 #include "gemini/cheetah/tensor_shape.h"
-#include <seal/serializable.h>
 
 // Forward
 namespace seal {
@@ -46,7 +46,8 @@ class HomConv2DSS {
   ~HomConv2DSS() = default;
 
   Code setUp(const seal::SEALContext &context,
-             std::optional<seal::SecretKey> sk);
+             std::optional<seal::SecretKey> sk = std::nullopt,
+             std::shared_ptr<seal::PublicKey> pk = nullptr);
 
   [[nodiscard]] seal::scheme_type scheme() const;
 
@@ -54,9 +55,10 @@ class HomConv2DSS {
 
   uint64_t plain_modulus() const;
 
-  Code encryptImage(const Tensor<uint64_t> &in_tensor_share, const Meta &meta,
-                    std::vector<seal::Serializable<seal::Ciphertext>> &encrypted_share,
-                    size_t nthreads = 1) const;
+  Code encryptImage(
+      const Tensor<uint64_t> &in_tensor_share, const Meta &meta,
+      std::vector<seal::Serializable<seal::Ciphertext>> &encrypted_share,
+      size_t nthreads = 1) const;
 
   Code encodeImage(const Tensor<uint64_t> &in_tensor_share, const Meta &meta,
                    std::vector<seal::Plaintext> &encoded_share,
@@ -70,10 +72,8 @@ class HomConv2DSS {
   Code conv2DSS(const std::vector<seal::Ciphertext> &img_share0,
                 const std::vector<seal::Plaintext> &img_share1,
                 const std::vector<std::vector<seal::Plaintext>> &filters,
-                const Meta &meta,
-                std::vector<seal::Ciphertext> &out_share0,
+                const Meta &meta, std::vector<seal::Ciphertext> &out_share0,
                 Tensor<uint64_t> &out_share1, size_t nthreads = 1) const;
-
 
   Code decryptToTensor(const std::vector<seal::Ciphertext> &enc_tensor,
                        const Meta &meta, Tensor<uint64_t> &out,
@@ -81,9 +81,9 @@ class HomConv2DSS {
 
   Code idealFunctionality(const Tensor<uint64_t> &in_tensor,
                           const std::vector<Tensor<uint64_t>> &filters,
-                          const Meta &meta,
-                          Tensor<uint64_t> &out_tensor) const;
-protected:
+                          const Meta &meta, Tensor<uint64_t> &out_tensor) const;
+
+ protected:
   size_t conv2DOneFilter(const std::vector<seal::Ciphertext> &enc_tensor,
                          const std::vector<seal::Plaintext> &filter,
                          const Meta &meta, seal::Ciphertext *out_buff,
@@ -101,12 +101,14 @@ protected:
   Code removeUnusedCoeffs(std::vector<seal::Ciphertext> &ct, const Meta &meta,
                           double *density = nullptr) const;
 
-  Code postProcessInplace(seal::Plaintext &pt, std::vector<size_t> &targets, uint64_t *out_poly, size_t out_buff_size) const;
+  Code postProcessInplace(seal::Plaintext &pt, std::vector<size_t> &targets,
+                          uint64_t *out_poly, size_t out_buff_size) const;
 
   std::shared_ptr<seal::SEALContext> context_;
   std::shared_ptr<TensorEncoder> tencoder_{nullptr};
   std::shared_ptr<seal::Evaluator> evaluator_{nullptr};
   std::shared_ptr<seal::Encryptor> encryptor_{nullptr};
+  std::shared_ptr<seal::Encryptor> pk_encryptor_{nullptr};
 
   std::optional<seal::SecretKey> sk_{std::nullopt};
 };

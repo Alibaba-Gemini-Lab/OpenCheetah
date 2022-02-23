@@ -42,7 +42,8 @@ class HomFCSS {
   ~HomFCSS() = default;
 
   Code setUp(const seal::SEALContext &context,
-             std::optional<seal::SecretKey> sk);
+             std::optional<seal::SecretKey> sk = std::nullopt,
+             std::shared_ptr<seal::PublicKey> pk = nullptr);
 
   [[nodiscard]] seal::scheme_type scheme() const;
 
@@ -113,6 +114,7 @@ class HomFCSS {
   std::shared_ptr<seal::SEALContext> context_;
   std::shared_ptr<seal::Evaluator> evaluator_{nullptr};
   std::shared_ptr<seal::Encryptor> encryptor_{nullptr};
+  std::shared_ptr<seal::Encryptor> pk_encryptor_{nullptr};
 
   std::optional<seal::SecretKey> sk_{std::nullopt};
 };

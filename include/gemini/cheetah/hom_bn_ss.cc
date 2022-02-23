@@ -74,7 +74,8 @@ TensorShape HomBNSS::getSplit(const Meta &meta) const {
 }
 
 Code HomBNSS::setUp(uint64_t target_base_mod, const seal::SEALContext &context,
-                    std::optional<seal::SecretKey> sk) {
+                    std::optional<seal::SecretKey> sk,
+                    std::shared_ptr<seal::PublicKey> pk) {
   direct_context_ = std::make_shared<seal::SEALContext>(context);
   ENSURE_OR_RETURN(direct_context_, Code::ERR_NULL_POINTER);
   auto parms = direct_context_->first_context_data()->parms();
@@ -97,13 +98,24 @@ Code HomBNSS::setUp(uint64_t target_base_mod, const seal::SEALContext &context,
         std::make_shared<seal::Encryptor>(*direct_context_, *sk);
   }
 
+  if (pk) {
+    if (!seal::is_metadata_valid_for(*pk, *direct_context_)) {
+      LOG(WARNING) << "HomBNSS: invalid public key for this SEALContext";
+      return Code::ERR_INVALID_ARG;
+    }
+
+    direct_pk_encryptor_ =
+        std::make_shared<seal::Encryptor>(*direct_context_, *pk);
+  }
+
   direct_evaluator_ = std::make_shared<seal::Evaluator>(*direct_context_);
   return Code::OK;
 }
 
 Code HomBNSS::setUp(uint64_t target_base_mod,
                     const std::vector<seal::SEALContext> &contexts,
-                    std::vector<std::optional<seal::SecretKey>> sks) {
+                    std::vector<std::optional<seal::SecretKey>> sks,
+                    std::vector<std::shared_ptr<seal::PublicKey>> pks) {
   ENSURE_OR_RETURN(!contexts.empty(), Code::ERR_CONFIG);
   ENSURE_OR_RETURN(sks.empty() || contexts.size() == sks.size(),
                    Code::ERR_CONFIG);
@@ -186,6 +198,14 @@ Code HomBNSS::setUp(uint64_t target_base_mod,
       sks_[i] = seal::SecretKey(*sks[i]);
       encryptors_[i] =
           std::make_shared<seal::Encryptor>(*contexts_[i], *sks_[i]);
+    }
+  }
+
+  if (!pks.empty()) {
+    pk_encryptors_.resize(nCRT);
+    for (size_t i = 0; i < nCRT; ++i) {
+      pk_encryptors_[i] =
+          std::make_shared<seal::Encryptor>(*contexts_[i], *pks[i]);
     }
   }
 
@@ -749,34 +769,38 @@ Code HomBNSS::bn_direct(const std::vector<seal::Ciphertext> &tensor_share0,
 
   std::vector<seal::Plaintext> rnd;
   auto mask_prog = [&](long wid, size_t start, size_t end) {
+    RLWECt zero;
     for (size_t cid = start; cid < end; ++cid) {
       direct_evaluator_->mod_switch_to_inplace(
           out_share0[cid], direct_context_->last_parms_id());
       direct_evaluator_->sub_plain_inplace(out_share0[cid], rnd[cid]);
+      direct_pk_encryptor_->encrypt_zero(out_share0[cid].parms_id(), zero);
+      direct_evaluator_->add_inplace(out_share0[cid], zero);
 
       std::array<size_t, 3> indices;
-	  indices[0] = cid / (dH * dW);
-	  indices[1] = (cid / dW) % dH;
-	  indices[2] = cid % dW;
+      indices[0] = cid / (dH * dW);
+      indices[1] = (cid / dW) % dH;
+      indices[2] = cid % dW;
       std::array<int, 3> offsets{0};
       for (int d = 0; d < 3; ++d) {
         offsets[d] = static_cast<int>(indices[d] * split_shape.dim_size(d));
       }
-	  std::vector<size_t> used_coeff_indices;
-	  size_t used_index = 0;
-	  for (int c = 0; c < split_shape.channels(); ++c) {
-		for (int h = 0; h < split_shape.height(); ++h) {
-		  for (int w = 0; w < split_shape.width(); ++w) {
-			if (offsets[0] + c >= meta.ishape.channels() ||
-				offsets[1] + h >= meta.ishape.height() ||
-				offsets[2] + w >= meta.ishape.width()) {
-			  continue;
-			}
-			used_coeff_indices.push_back(used_index++);
-		  }
-		}
-	  }
-	  remove_unused_coeffs(out_share0[cid], *direct_evaluator_, used_coeff_indices);
+      std::vector<size_t> used_coeff_indices;
+      size_t used_index = 0;
+      for (int c = 0; c < split_shape.channels(); ++c) {
+        for (int h = 0; h < split_shape.height(); ++h) {
+          for (int w = 0; w < split_shape.width(); ++w) {
+            if (offsets[0] + c >= meta.ishape.channels() ||
+                offsets[1] + h >= meta.ishape.height() ||
+                offsets[2] + w >= meta.ishape.width()) {
+              continue;
+            }
+            used_coeff_indices.push_back(used_index++);
+          }
+        }
+      }
+      remove_unused_coeffs(out_share0[cid], *direct_evaluator_,
+                           used_coeff_indices);
 
       truncate_for_decryption(out_share0[cid], *direct_evaluator_,
                               *direct_context_);

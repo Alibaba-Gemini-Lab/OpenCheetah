@@ -165,7 +165,8 @@ uint64_t HomConv2DSS::plain_modulus() const {
 }
 
 Code HomConv2DSS::setUp(const seal::SEALContext &context,
-                        std::optional<seal::SecretKey> sk) {
+                        std::optional<seal::SecretKey> sk,
+                        std::shared_ptr<seal::PublicKey> pk) {
   context_ = std::make_shared<seal::SEALContext>(context);
   ENSURE_OR_RETURN(context_, Code::ERR_NULL_POINTER);
 
@@ -177,6 +178,15 @@ Code HomConv2DSS::setUp(const seal::SEALContext &context,
 
     sk_ = seal::SecretKey(*sk);
     encryptor_ = std::make_shared<seal::Encryptor>(*context_, *sk);
+  }
+
+  if (pk) {
+    if (!seal::is_metadata_valid_for(*pk, *context_)) {
+      LOG(WARNING) << "HomConv2DSS: invalid public key for this SEALContext";
+      return Code::ERR_INVALID_ARG;
+    }
+
+    pk_encryptor_ = std::make_shared<seal::Encryptor>(*context_, *pk);
   }
 
   tencoder_ = std::make_shared<TensorEncoder>(*context_);
@@ -448,6 +458,8 @@ Code HomConv2DSS::sampleRandomMask(const std::vector<size_t> &targets,
 Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
                                 Tensor<uint64_t> &mask_tensor, const Meta &meta,
                                 size_t nthreads) const {
+  ENSURE_OR_RETURN(pk_encryptor_, Code::ERR_CONFIG);
+
   TensorShape strided_ishape;
   std::array<int, 2> pads{0};
   std::array<int, 3> slice_width{0};
@@ -500,6 +512,10 @@ Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
           // BFV/BGV can drop all but keep one modulus
           // NOTICE(wen-jie): the mod switch should placed AFTER the sub
           evaluator_->mod_switch_to_inplace(this_ct, context_->last_parms_id());
+
+          RLWECt zero;
+          pk_encryptor_->encrypt_zero(this_ct.parms_id(), zero);
+          evaluator_->add_inplace(this_ct, zero);
 
           auto coeff_ptr = coeffs.data();
           for (long h = 0; h < slice_shape.height(); ++h) {

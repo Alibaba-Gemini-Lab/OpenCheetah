@@ -1,0 +1,1 @@
+- 2022-02-23: Add re-randomization using asymmetric encryption of zero.

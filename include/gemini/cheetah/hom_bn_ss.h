@@ -44,10 +44,12 @@ class HomBNSS {
 
   Code setUp(uint64_t target_base_mod,
              const std::vector<seal::SEALContext> &contexts,
-             std::vector<std::optional<seal::SecretKey>> sks);
+             std::vector<std::optional<seal::SecretKey>> sks,
+             std::vector<std::shared_ptr<seal::PublicKey>> pks);
 
   Code setUp(uint64_t target_base_mod, const seal::SEALContext &context,
-             std::optional<seal::SecretKey> sk);
+             std::optional<seal::SecretKey> sk = std::nullopt,
+             std::shared_ptr<seal::PublicKey> pk = nullptr);
 
   inline seal::scheme_type scheme() const { return scheme_; }
 
@@ -192,6 +194,7 @@ class HomBNSS {
   std::optional<seal::SecretKey> direct_sk_;
   std::shared_ptr<seal::Evaluator> direct_evaluator_;
   std::shared_ptr<seal::Encryptor> direct_encryptor_;
+  std::shared_ptr<seal::Encryptor> direct_pk_encryptor_;
 
   // CrytoFlow2-like BN
   std::vector<std::shared_ptr<seal::SEALContext>> contexts_;
@@ -199,6 +202,7 @@ class HomBNSS {
   std::vector<std::shared_ptr<seal::BatchEncoder>> encoders_;
   std::vector<std::shared_ptr<seal::Evaluator>> evaluators_;
   std::vector<std::shared_ptr<seal::Encryptor>> encryptors_;
+  std::vector<std::shared_ptr<seal::Encryptor>> pk_encryptors_;
 };
 
 }  // namespace gemini

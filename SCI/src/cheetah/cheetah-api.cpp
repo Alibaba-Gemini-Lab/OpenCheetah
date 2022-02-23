@@ -138,9 +138,9 @@ CheetahLinear::CheetahLinear(int party, sci::NetIO *io, uint64_t base_mod,
     pk_->load(*context_, is);
     delete[] key_buf;
 
-    conv2d_impl_.setUp(*context_, std::nullopt);
-    fc_impl_.setUp(*context_, std::nullopt);
-    bn_impl_.setUp(base_mod, *context_, std::nullopt);
+    conv2d_impl_.setUp(*context_, std::nullopt, pk_);
+    fc_impl_.setUp(*context_, std::nullopt, pk_);
+    bn_impl_.setUp(base_mod, *context_, std::nullopt, pk_);
   }
 
   if (is_mod_2k) {
@@ -151,9 +151,9 @@ CheetahLinear::CheetahLinear(int party, sci::NetIO *io, uint64_t base_mod,
     Code ok;
     if (party == sci::BOB) {
       bn_opt_sk.push_back(*sk_);
-      ok = bn_impl_.setUp(plain_mod, bn_context, bn_opt_sk);
+      ok = bn_impl_.setUp(plain_mod, bn_context, bn_opt_sk, {});
     } else {
-      ok = bn_impl_.setUp(plain_mod, bn_context, bn_opt_sk);
+      ok = bn_impl_.setUp(plain_mod, bn_context, bn_opt_sk, {});
     }
 
     if (ok != Code::OK) {
@@ -218,7 +218,7 @@ void CheetahLinear::setUpForBN() {
       contexts.emplace_back(*bn_contexts_[i]);
       opt_sks.emplace_back(*bn_sks_[i]);
     }
-    auto code = bn_impl_.setUp(base_mod_, contexts, opt_sks);
+    auto code = bn_impl_.setUp(base_mod_, contexts, opt_sks, {});
     if (code != Code::OK) {
       throw std::runtime_error("BN setUp failed [" + CodeMessage(code) + "]");
     }
@@ -237,7 +237,7 @@ void CheetahLinear::setUpForBN() {
       contexts.emplace_back(*bn_contexts_[i]);
     }
 
-    auto code = bn_impl_.setUp(base_mod_, contexts, opt_sks);
+    auto code = bn_impl_.setUp(base_mod_, contexts, opt_sks, bn_pks_);
     if (code != Code::OK) {
       throw std::runtime_error("BN setUp failed [" + CodeMessage(code) + "]");
     }

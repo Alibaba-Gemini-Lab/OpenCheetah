@@ -105,13 +105,14 @@ uint64_t HomFCSS::plain_modulus() const {
 }
 
 Code HomFCSS::setUp(const seal::SEALContext &context,
-                    std::optional<seal::SecretKey> sk) {
+                    std::optional<seal::SecretKey> sk,
+					std::shared_ptr<seal::PublicKey> pk) {
   context_ = std::make_shared<seal::SEALContext>(context);
   ENSURE_OR_RETURN(context_, Code::ERR_NULL_POINTER);
 
   if (sk) {
     if (!seal::is_metadata_valid_for(*sk, *context_)) {
-      LOG(WARNING) << "HomConv2DSS: invalid secret key for this SEALContext";
+      LOG(WARNING) << "HomFCSS: invalid secret key for this SEALContext";
       return Code::ERR_INVALID_ARG;
     }
 
@@ -119,6 +120,14 @@ Code HomFCSS::setUp(const seal::SEALContext &context,
     encryptor_ = std::make_shared<seal::Encryptor>(*context_, *sk);
   }
 
+  if (pk) {
+    if (!seal::is_metadata_valid_for(*pk, *context_)) {
+      LOG(WARNING) << "HomFCSS: invalid public key for this SEALContext";
+      return Code::ERR_INVALID_ARG;
+    }
+
+    pk_encryptor_ = std::make_shared<seal::Encryptor>(*context_, *pk);
+  }
   evaluator_ = std::make_shared<seal::Evaluator>(*context_);
   return Code::OK;
 }
@@ -432,6 +441,7 @@ Code HomFCSS::matVecMul(const std::vector<std::vector<seal::Plaintext>> &matrix,
 Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
                             Tensor<uint64_t> &mask_vector, const Meta &meta,
                             gemini::ThreadPool &tpool) const {
+  ENSURE_OR_RETURN(pk_encryptor_, Code::ERR_CONFIG);
   TensorShape split_shape = getSplit(meta, poly_degree());
   const size_t n_ct_out =
       CeilDiv<size_t>(meta.weight_shape.rows(), split_shape.rows());
@@ -443,6 +453,7 @@ Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
   }
 
   auto mask_prg = [&](long wid, size_t start, size_t end) {
+    RLWECt zero;
     RLWEPt mask;
     std::vector<U64> coeffs(targets.size());
     mask_vector.Reshape(GetOutShape(meta));
@@ -452,6 +463,10 @@ Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
                                  this_ct.parms_id(), this_ct.is_ntt_form()),
                 "RandomMaskPoly");
       evaluator_->sub_plain_inplace(this_ct, mask);
+
+      pk_encryptor_->encrypt_zero(this_ct.parms_id(), zero);
+      evaluator_->add_inplace(this_ct, zero);
+
       auto row_bgn = r_blk * split_shape.rows();
       auto row_end = std::min<size_t>(row_bgn + split_shape.rows(),
                                       meta.weight_shape.rows());
