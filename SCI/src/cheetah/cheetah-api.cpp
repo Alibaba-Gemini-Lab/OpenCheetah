@@ -102,7 +102,7 @@ CheetahLinear::CheetahLinear(int party, sci::NetIO *io, uint64_t base_mod,
   seal_parms.set_coeff_modulus(CoeffModulus::Create(4096, moduli_bits));
   seal_parms.set_plain_modulus(plain_mod);
   context_ =
-      std::make_shared<SEALContext>(seal_parms, true, sec_level_type::none);
+      std::make_shared<SEALContext>(seal_parms, true, sec_level_type::tc128);
 
   if (party == sci::BOB) {
     // Bob generate keys
@@ -178,12 +178,9 @@ void CheetahLinear::setUpForBN() {
   const size_t N = 4096;
   auto plain_crts = CoeffModulus::Create(N, crt_primes_bits);
   EncryptionParameters seal_parms(scheme_type::bfv);
-
-  std::vector<int> cipher_moduli_bits{60, 49, 30};
-  if (base_mod_ < (1L << 40)) {
-    cipher_moduli_bits[0] = 49;
-  }
-  // seal_parms.set_use_special_modulus(false);
+  seal_parms.set_n_special_primes(0);
+  // We are not exporting the pk/ct with more than 109-bit.
+  std::vector<int> cipher_moduli_bits{60, 49};
   seal_parms.set_poly_modulus_degree(N);
   seal_parms.set_coeff_modulus(CoeffModulus::Create(N, cipher_moduli_bits));
 
@@ -191,7 +188,7 @@ void CheetahLinear::setUpForBN() {
   for (size_t i = 0; i < nCRT; ++i) {
     seal_parms.set_plain_modulus(plain_crts[i]);
     bn_contexts_[i] =
-        std::make_shared<SEALContext>(seal_parms, true, sec_level_type::none);
+        std::make_shared<SEALContext>(seal_parms, true, sec_level_type::tc128);
   }
 
   std::vector<seal::SEALContext> contexts;
