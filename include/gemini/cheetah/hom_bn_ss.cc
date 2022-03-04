@@ -773,6 +773,7 @@ Code HomBNSS::bn_direct(const std::vector<seal::Ciphertext> &tensor_share0,
     for (size_t cid = start; cid < end; ++cid) {
       direct_evaluator_->mod_switch_to_inplace(
           out_share0[cid], direct_context_->last_parms_id());
+
       direct_evaluator_->sub_plain_inplace(out_share0[cid], rnd[cid]);
       direct_pk_encryptor_->encrypt_zero(out_share0[cid].parms_id(), zero);
       direct_evaluator_->add_inplace(out_share0[cid], zero);
@@ -832,8 +833,7 @@ Code HomBNSS::bn_direct(const std::vector<seal::Ciphertext> &tensor_share0,
   auto &parms =
       direct_context_->get_context_data(out_share0[0].parms_id())->parms();
   auto prng = parms.random_generator()->create();
-  const size_t nbytes =
-      mul_safe<size_t>(meta.ishape.num_elements(), sizeof(uint64_t));
+  const size_t nbytes = mul_safe<size_t>(meta.ishape.num_elements(), sizeof(uint64_t));
   prng->generate(nbytes, reinterpret_cast<std::byte *>(out_share1.data()));
   const uint64_t mod_mask = target_base_mod_ - 1;
   if (IsTwoPower(target_base_mod_)) {

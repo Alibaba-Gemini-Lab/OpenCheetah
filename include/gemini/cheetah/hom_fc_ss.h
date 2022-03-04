@@ -101,6 +101,7 @@ class HomFCSS {
   Code sampleRandomMask(const std::vector<size_t> &targets,
                         uint64_t *coeffs_buff, size_t buff_size,
                         seal::Plaintext &mask, seal::parms_id_type pid,
+						std::shared_ptr<seal::UniformRandomGenerator> prng,
                         bool is_ntt) const;
 
   Code addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,

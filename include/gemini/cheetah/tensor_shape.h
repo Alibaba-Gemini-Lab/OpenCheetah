@@ -5,6 +5,7 @@
 #include <initializer_list>
 #include <iosfwd>
 #include <vector>
+#include <stdexcept>
 
 namespace gemini {
 enum class Padding { VALID, SAME };

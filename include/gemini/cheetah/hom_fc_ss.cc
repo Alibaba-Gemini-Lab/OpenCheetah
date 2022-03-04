@@ -76,6 +76,12 @@ static Code LaunchWorks(
   }
 }
 
+void flood_ciphertext(seal::Ciphertext &ct,
+                      std::shared_ptr<seal::UniformRandomGenerator> prng,
+                      const seal::SEALContext &context,
+                      const seal::Encryptor &pk_encryptor,
+                      const seal::Evaluator &evaluator);
+
 void truncate_for_decryption(seal::Ciphertext &ct,
                              const seal::Evaluator &evaluator,
                              const seal::SEALContext &context);
@@ -106,7 +112,7 @@ uint64_t HomFCSS::plain_modulus() const {
 
 Code HomFCSS::setUp(const seal::SEALContext &context,
                     std::optional<seal::SecretKey> sk,
-					std::shared_ptr<seal::PublicKey> pk) {
+                    std::shared_ptr<seal::PublicKey> pk) {
   context_ = std::make_shared<seal::SEALContext>(context);
   ENSURE_OR_RETURN(context_, Code::ERR_NULL_POINTER);
 
@@ -457,15 +463,17 @@ Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
     RLWEPt mask;
     std::vector<U64> coeffs(targets.size());
     mask_vector.Reshape(GetOutShape(meta));
+    auto prng =
+        context_->first_context_data()->parms().random_generator()->create();
     for (size_t r_blk = start; r_blk < end; ++r_blk) {
       auto &this_ct = cts.at(r_blk);
-      CHECK_ERR(sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
-                                 this_ct.parms_id(), this_ct.is_ntt_form()),
-                "RandomMaskPoly");
+      CHECK_ERR(
+          sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
+                           this_ct.parms_id(), prng, this_ct.is_ntt_form()),
+          "RandomMaskPoly");
       evaluator_->sub_plain_inplace(this_ct, mask);
 
-      pk_encryptor_->encrypt_zero(this_ct.parms_id(), zero);
-      evaluator_->add_inplace(this_ct, zero);
+      flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_, *evaluator_);
 
       auto row_bgn = r_blk * split_shape.rows();
       auto row_end = std::min<size_t>(row_bgn + split_shape.rows(),
@@ -526,10 +534,10 @@ Code HomFCSS::removeUnusedCoeffs(std::vector<seal::Ciphertext> &cts,
   return Code::OK;
 }
 
-Code HomFCSS::sampleRandomMask(const std::vector<size_t> &targets,
-                               uint64_t *coeffs_buff, size_t buff_size,
-                               seal::Plaintext &mask, seal::parms_id_type pid,
-                               bool is_ntt) const {
+Code HomFCSS::sampleRandomMask(
+    const std::vector<size_t> &targets, uint64_t *coeffs_buff, size_t buff_size,
+    seal::Plaintext &mask, seal::parms_id_type pid,
+    std::shared_ptr<seal::UniformRandomGenerator> prng, bool is_ntt) const {
   using namespace seal::util;
   ENSURE_OR_RETURN(context_, Code::ERR_CONFIG);
 
@@ -548,9 +556,13 @@ Code HomFCSS::sampleRandomMask(const std::vector<size_t> &targets,
   mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
   mask.resize(N);
 
-  auto prng = parms.random_generator()->create();
   const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
-  prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
+  if (prng) {
+    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
+  } else {
+    auto _prng = parms.random_generator()->create();
+    _prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
+  }
 
   if (IsTwoPower(plain_modulus())) {
     uint64_t mod_mask = plain_modulus() - 1;

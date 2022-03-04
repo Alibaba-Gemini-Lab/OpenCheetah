@@ -94,12 +94,9 @@ CheetahLinear::CheetahLinear(int party, sci::NetIO *io, uint64_t base_mod,
 
   using namespace seal;
   EncryptionParameters seal_parms(scheme_type::bfv);
-  // Last 20bits is dummy for the security.
+  seal_parms.set_n_special_primes(0);
   // We are not exporting the pk/ct with more than 109-bit.
-  std::vector<int> moduli_bits{60, 49, 20};
-  if (base_mod_ < (1UL << 40)) {
-    moduli_bits[0] = 49;
-  }
+  std::vector<int> moduli_bits{60, 49};
 
   seal_parms.set_poly_modulus_degree(4096);
   seal_parms.set_coeff_modulus(CoeffModulus::Create(4096, moduli_bits));
