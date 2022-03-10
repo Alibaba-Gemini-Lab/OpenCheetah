@@ -16,3 +16,6 @@
 [submodule "deps/emp-tool"]
 	path = deps/emp-tool
 	url = https://github.com/emp-toolkit/emp-tool.git
+[submodule "sqnet_demo/imagenet-sample-images"]
+	path = sqnet_demo/imagenet-sample-images
+	url = https://github.com/EliSchwartz/imagenet-sample-images.git

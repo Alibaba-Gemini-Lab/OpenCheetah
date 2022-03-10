@@ -1,1 +1,2 @@
 - 2022-02-23: Add re-randomization using asymmetric encryption of zero.
+- 2022-03-10: Add scripts for more examples for the squeezenet.
