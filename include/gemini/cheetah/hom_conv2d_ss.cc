@@ -188,6 +188,7 @@ Code sample_random_mask(const std::vector<size_t> &targets,
   ENSURE_OR_RETURN(cntxt_data != nullptr, Code::ERR_INVALID_ARG);
   ENSURE_OR_RETURN(!targets.empty(), Code::ERR_INVALID_ARG);
   ENSURE_OR_RETURN(buff_size >= targets.size(), Code::ERR_OUT_BOUND);
+  ENSURE_OR_RETURN(coeffs_buff != nullptr, Code::ERR_NULL_POINTER);
   ENSURE_OR_RETURN(prng != nullptr, Code::ERR_NULL_POINTER);
 
   auto parms = cntxt_data->parms();
@@ -232,15 +233,16 @@ Code sample_random_mask(const std::vector<size_t> &targets,
   ENSURE_OR_RETURN(cntxt_data != nullptr, Code::ERR_INVALID_ARG);
   ENSURE_OR_RETURN(!targets.empty(), Code::ERR_INVALID_ARG);
   ENSURE_OR_RETURN(buff_size >= targets.size(), Code::ERR_OUT_BOUND);
+  ENSURE_OR_RETURN(coeffs_buff != nullptr, Code::ERR_NULL_POINTER);
   ENSURE_OR_RETURN(prng != nullptr, Code::ERR_NULL_POINTER);
 
-  const size_t N = poly_degree();
+  auto parms = cntxt_data->parms();
+  const size_t N = parms.poly_modulus_degree();
   if (std::any_of(targets.begin(), targets.end(),
                   [N](size_t c) { return c >= N; })) {
     return Code::ERR_INVALID_ARG;
   }
 
-  auto parms = cntxt_data->parms();
   mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
   mask.resize(N);
 
@@ -252,14 +254,14 @@ Code sample_random_mask(const std::vector<size_t> &targets,
     _prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
   }
 
-  if (IsTwoPower(plain_modulus())) {
-    uint64_t mod_mask = plain_modulus() - 1;
+  const auto &t = parms.plain_modulus();
+  if (IsTwoPower(t.value())) {
+    uint64_t mod_mask = t.value() - 1;
     std::transform(mask.data(), mask.data() + mask.coeff_count(), mask.data(),
                    [mod_mask](uint64_t u) { return u & mod_mask; });
   } else {
     // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
-    modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
-                       mask.data());
+    modulo_poly_coeffs(mask.data(), mask.coeff_count(), t, mask.data());
   }
 
   auto coeff_ptr = coeffs_buff;

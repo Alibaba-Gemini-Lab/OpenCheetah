@@ -96,6 +96,12 @@ Code sample_random_mask(const std::vector<size_t> &targets,
                         std::shared_ptr<seal::UniformRandomGenerator> prng,
                         const seal::SEALContext &context);
 
+namespace internal {
+void sub_poly_inplace(seal::Ciphertext &ct, const seal::Plaintext &pt,
+                      const seal::SEALContext &context,
+                      const seal::Evaluator &evaluator);
+}
+
 seal::scheme_type HomFCSS::scheme() const {
   if (context_) {
     return context_->first_context_data()->parms().scheme();
@@ -483,7 +489,7 @@ Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
           sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
                            this_ct.parms_id(), prng, this_ct.is_ntt_form()),
           "RandomMaskPoly");
-      evaluator_->sub_plain_inplace(this_ct, mask);
+	  internal::sub_poly_inplace(this_ct, mask, *context_, *evaluator_);
 
       auto row_bgn = r_blk * split_shape.rows();
       auto row_end = std::min<size_t>(row_bgn + split_shape.rows(),
