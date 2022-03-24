@@ -1,2 +1,3 @@
 - 2022-02-23: Add re-randomization using asymmetric encryption of zero.
 - 2022-03-10: Add scripts for more examples for the squeezenet.
+- 2022-03-24: Add 1-bit approximate re-sharing as an alternative of noise flooding.	

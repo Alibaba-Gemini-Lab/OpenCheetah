@@ -10,9 +10,8 @@
 
 #define VERIFY_LAYERWISE
 #define LOG _LAYERWISE
-#undef VERIFY_LAYERWISE // undefine this to turn OFF the verifcation
+//#undef VERIFY_LAYERWISE // undefine this to turn OFF the verifcation
 //#undef LOG_LAYERWISE // undefine this to turn OFF the log
-
 
 #ifndef SCI_OT
 extern int64_t getSignedVal(uint64_t x);
@@ -25,12 +24,13 @@ extern uint64_t moduloMidPt;
 static inline int64_t getSignedVal(uint64_t x) {
   assert(x < prime_mod);
   int64_t sx = x;
-  if (x >= moduloMidPt)
-    sx = x - prime_mod;
+  if (x >= moduloMidPt) sx = x - prime_mod;
   return sx;
 }
 
-static inline uint64_t getRingElt(int64_t x) { return ((uint64_t)x) & moduloMask; }
+static inline uint64_t getRingElt(int64_t x) {
+  return ((uint64_t)x) & moduloMask;
+}
 #endif
 
 extern uint64_t SecretAdd(uint64_t x, uint64_t y);
@@ -55,9 +55,11 @@ extern void Conv2DWrapper_pt(uint64_t N, uint64_t H, uint64_t W, uint64_t CI,
                              uint64_4D &inputArr, uint64_4D &filterArr,
                              uint64_4D &outArr);
 
-extern void MatMul2DEigen_pt(int64_t i, int64_t j, int64_t k, uint64_2D &A, uint64_2D &B, uint64_2D &C, int64_t consSF);
+extern void MatMul2DEigen_pt(int64_t i, int64_t j, int64_t k, uint64_2D &A,
+                             uint64_2D &B, uint64_2D &C, int64_t consSF);
 
-extern void ElemWiseActModelVectorMult_pt(uint64_t s1, uint64_1D &arr1, uint64_1D &arr2, uint64_1D &outArr);
+extern void ElemWiseActModelVectorMult_pt(uint64_t s1, uint64_1D &arr1,
+                                          uint64_1D &arr2, uint64_1D &outArr);
 #endif
 
 void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
@@ -77,7 +79,8 @@ void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
   TensorShape weight_shape = is_A_weight_matrix ? mat_A_shape : mat_B_shape;
   meta.input_shape = TensorShape({input_shape.dim_size(1)});
   // Transpose
-  meta.weight_shape = TensorShape({weight_shape.dim_size(1), weight_shape.dim_size(0)});
+  meta.weight_shape =
+      TensorShape({weight_shape.dim_size(1), weight_shape.dim_size(0)});
   meta.is_shared_input = kIsSharedInput;
 
   auto weight_mat = is_A_weight_matrix ? mat_A : mat_B;
@@ -91,7 +94,8 @@ void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
     const size_t ncols = weight_shape.dim_size(1);
     for (long r = 0; r < nrows; ++r) {
       for (long c = 0; c < ncols; ++c) {
-        Arr2DIdxRowM(weight_matrix.data(), ncols, nrows, c, r) = getRingElt(Arr2DIdxRowM(weight_mat, nrows, ncols, r, c));
+        Arr2DIdxRowM(weight_matrix.data(), ncols, nrows, c, r) =
+            getRingElt(Arr2DIdxRowM(weight_mat, nrows, ncols, r, c));
       }
     }
   }
@@ -102,7 +106,8 @@ void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
 
     Tensor<intType> input_vector;
     if (meta.is_shared_input) {
-      input_vector = Tensor<intType>::Wrap(const_cast<intType *>(input_row), meta.input_shape);
+      input_vector = Tensor<intType>::Wrap(const_cast<intType *>(input_row),
+                                           meta.input_shape);
     } else {
       input_vector.Reshape(meta.input_shape);
       std::transform(input_row, input_row + meta.input_shape.num_elements(),
@@ -112,16 +117,19 @@ void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
 
     Tensor<uint64_t> out_vec;
     cheetah_linear->fc(input_vector, weight_matrix, meta, out_vec);
-    std::copy_n(out_vec.data(), out_vec.shape().num_elements(), mat_C + r * input_shape.cols());
+    std::copy_n(out_vec.data(), out_vec.shape().num_elements(),
+                mat_C + r * input_shape.cols());
   }
 
   if (cheetah_linear->party() == SERVER) {
-    cheetah_linear->safe_erase(weight_matrix.data(), meta.weight_shape.num_elements());
+    cheetah_linear->safe_erase(weight_matrix.data(),
+                               meta.weight_shape.num_elements());
   }
 #ifdef LOG_LAYERWISE
   auto temp = TIMER_TILL_NOW;
   MatMulTimeInMilliSec += temp;
-  std::cout << "Time in sec for current matmul = " << (temp / 1000.0) << std::endl;
+  std::cout << "Time in sec for current matmul = " << (temp / 1000.0)
+            << std::endl;
   uint64_t curComm;
   FIND_ALL_IO_TILL_NOW(curComm);
   MatMulCommSent += curComm;
@@ -141,7 +149,7 @@ void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
     }
   }
 #endif
-if (party == SERVER) {
+  if (party == SERVER) {
     funcReconstruct2PCCons(nullptr, A, s1 * s2);
     funcReconstruct2PCCons(nullptr, B, s2 * s3);
     funcReconstruct2PCCons(nullptr, C, s1 * s3);
@@ -182,7 +190,9 @@ if (party == SERVER) {
           if (pass) {
             std::cout << gnd << " => " << cmp << "\n";
           }
-          pass = false;
+		  if (pass && std::abs(gnd - cmp) > 1) {
+            pass = false;
+		  }
         }
       }
     }
@@ -234,7 +244,8 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
     for (int j = 0; j < FW; j++) {
       for (int k = 0; k < CI; k++) {
         for (int p = 0; p < CO; p++) {
-          filters.at(p)(k, i, j) = getRingElt(Arr4DIdxRowM(filterArr, FH, FW, CI, CO, i, j, k, p));
+          filters.at(p)(k, i, j) =
+              getRingElt(Arr4DIdxRowM(filterArr, FH, FW, CI, CO, i, j, k, p));
         }
       }
     }
@@ -251,8 +262,8 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
       ctr++, N, meta.ishape.height(), meta.ishape.width(),
       meta.ishape.channels(), meta.fshape.height(), meta.fshape.width(),
       meta.n_filters, meta.stride,
-      (meta.padding == gemini::Padding::VALID ? "VALID" : "SAME"),
-      zPadHLeft, zPadHRight, zPadWLeft, zPadWRight);
+      (meta.padding == gemini::Padding::VALID ? "VALID" : "SAME"), zPadHLeft,
+      zPadHRight, zPadWLeft, zPadWRight);
 
 #ifdef LOG_LAYERWISE
   const int64_t io_counter = cheetah_linear->io_counter();
@@ -263,7 +274,8 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
     for (int j = 0; j < H; j++) {
       for (int k = 0; k < W; k++) {
         for (int p = 0; p < CI; p++) {
-          image(p, j, k) = getRingElt(Arr4DIdxRowM(inputArr, N, H, W, CI, i, j, k, p));
+          image(p, j, k) =
+              getRingElt(Arr4DIdxRowM(inputArr, N, H, W, CI, i, j, k, p));
         }
       }
     }
@@ -274,7 +286,8 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
     for (int j = 0; j < newH; j++) {
       for (int k = 0; k < newW; k++) {
         for (int p = 0; p < CO; p++) {
-          Arr4DIdxRowM(outArr, N, newH, newW, CO, i, j, k, p) = out_tensor(p, j, k);
+          Arr4DIdxRowM(outArr, N, newH, newW, CO, i, j, k, p) =
+              out_tensor(p, j, k);
         }
       }
     }
@@ -293,14 +306,14 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
   ConvCommSent += curComm;
 #endif
 
-
 #ifdef VERIFY_LAYERWISE
 #ifdef SCI_HE
   for (int i = 0; i < N; i++) {
     for (int j = 0; j < newH; j++) {
       for (int k = 0; k < newW; k++) {
         for (int p = 0; p < CO; p++) {
-          assert(Arr4DIdxRowM(outArr, N, newH, newW, CO, i, j, k, p) < prime_mod);
+          assert(Arr4DIdxRowM(outArr, N, newH, newW, CO, i, j, k, p) <
+                 prime_mod);
         }
       }
     }
@@ -361,17 +374,30 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
 
     bool pass = true;
     int err_cnt = 0;
+    int pos_one = 0, neg_one = 0;
     for (int i = 0; i < N; i++) {
       for (int j = 0; j < newH; j++) {
         for (int k = 0; k < newW; k++) {
           for (int p = 0; p < CO; p++) {
             int64_t gnd = Arr4DIdxRowM(VoutputArr, N, newH, newW, CO, i, j, k, p);
             int64_t cmp = getSignedVal(VoutputVec[i][j][k][p]);
-            if (std::abs(gnd - cmp) > 0) {
-              if (err_cnt < 4) {
+            int64_t diff = gnd - cmp;
+
+            if (diff != 0) {
+
+              if (diff > 0 && pos_one < 2) {
+                std::cout << "expect " << gnd << " but got " << cmp << "\n";
+              } 
+
+			  if (diff < 0 && neg_one < 2) {
                 std::cout << "expect " << gnd << " but got " << cmp << "\n";
               }
-              pass = false;
+
+              pos_one += (diff > 0);
+              neg_one += (diff < 0);
+			  if (pass && std::abs(diff) > 1) {
+				pass = false;
+			  }
               ++err_cnt;
             }
           }
@@ -383,7 +409,8 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
       std::cout << GREEN << "Convolution Output Matches" << RESET << std::endl;
     } else {
       std::cout << RED << "Convolution Output Mismatch" << RESET << std::endl;
-      std::cout << "Error count " << err_cnt << std::endl;
+      printf("Error count %d (%d +1, %d -1). %f\%\n", err_cnt, pos_one,
+             neg_one, static_cast<double>(err_cnt) * 100. / (N * newH * newW * CO));
     }
 
     delete[] VinputArr;
@@ -393,8 +420,9 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
 #endif  // VERIFY_LAYERWISE
 }
 
-void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C, const intType *inputArr, const intType *scales, const intType *bias, intType *outArr) 
-{
+void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C,
+               const intType *inputArr, const intType *scales,
+               const intType *bias, intType *outArr) {
 #ifdef LOG_LAYERWISE
   INIT_ALL_IO_DATA_SENT;
   INIT_TIMER;
@@ -406,7 +434,8 @@ void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C, const intType *inputA
   meta.is_shared_input = kIsSharedInput;
   meta.ishape = gemini::TensorShape({C, H, W});
 
-  std::cout << "HomBN #" << batchNormCtr << " on shape " << meta.ishape << std::endl;
+  std::cout << "HomBN #" << batchNormCtr << " on shape " << meta.ishape
+            << std::endl;
   batchNormCtr++;
 
   gemini::Tensor<intType> scale_vec;
@@ -418,11 +447,11 @@ void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C, const intType *inputA
   gemini::Tensor<intType> in_tensor(meta.ishape);
   gemini::Tensor<intType> out_tensor;
   for (int b = 0; b < B; ++b) {
-
     for (int32_t h = 0; h < H; ++h) {
       for (int32_t w = 0; w < W; ++w) {
         for (int32_t c = 0; c < C; ++c) {
-          in_tensor(c, h, w) = getRingElt(Arr4DIdxRowM(inputArr, B, H, W, C, b, h, w, c));
+          in_tensor(c, h, w) =
+              getRingElt(Arr4DIdxRowM(inputArr, B, H, W, C, b, h, w, c));
         }
       }
     }
@@ -432,7 +461,8 @@ void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C, const intType *inputA
     for (int32_t h = 0; h < H; ++h) {
       for (int32_t w = 0; w < W; ++w) {
         for (int32_t c = 0; c < C; ++c) {
-          Arr4DIdxRowM(outArr, B, H, W, C, b, h, w, c) = SecretAdd(out_tensor(c, h, w), bias[c]);
+          Arr4DIdxRowM(outArr, B, H, W, C, b, h, w, c) =
+              SecretAdd(out_tensor(c, h, w), bias[c]);
         }
       }
     }
@@ -448,20 +478,21 @@ void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C, const intType *inputA
   uint64_t curComm;
   FIND_ALL_IO_TILL_NOW(curComm);
   BatchNormCommSent += curComm;
-  std::cout << "Time in sec for current BN = [" << (temp / 1000.0)
-            << "] sent [" << (curComm / 1024. / 1024.) << "] MB"
-            << std::endl;
+  std::cout << "Time in sec for current BN = [" << (temp / 1000.0) << "] sent ["
+            << (curComm / 1024. / 1024.) << "] MB" << std::endl;
 #endif
 }
 
-void ElemWiseActModelVectorMult(int32_t size, intType *inArr, intType *multArrVec, intType *outputArr) {
+void ElemWiseActModelVectorMult(int32_t size, intType *inArr,
+                                intType *multArrVec, intType *outputArr) {
 #ifdef LOG_LAYERWISE
   INIT_ALL_IO_DATA_SENT;
   INIT_TIMER;
 #endif
 
   static int batchNormCtr = 1;
-  printf("HomBN #%d via element-wise mult on %d points\n", batchNormCtr++, size);
+  printf("HomBN #%d via element-wise mult on %d points\n", batchNormCtr++,
+         size);
 
   gemini::CheetahLinear::BNMeta meta;
   meta.target_base_mod = prime_mod;
@@ -531,17 +562,17 @@ void ElemWiseActModelVectorMult(int32_t size, intType *inArr, intType *multArrVe
       int64_t cmp = VoutputArr[i];
       if (gnd != cmp) {
         if (pass) {
-          std::cout << RED << gnd << " ==> "   << cmp << RESET << std::endl;
+          std::cout << RED << gnd << " ==> " << cmp << RESET << std::endl;
         }
         pass = false;
       }
     }
     if (pass == true)
       std::cout << GREEN << "ElemWiseSecretVectorMult Output Matches" << RESET
-      << std::endl;
+                << std::endl;
     else
       std::cout << RED << "ElemWiseSecretVectorMult Output Mismatch" << RESET
-      << std::endl;
+                << std::endl;
 
     delete[] VinArr;
     delete[] VmultArr;

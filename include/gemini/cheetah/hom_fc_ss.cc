@@ -4,6 +4,7 @@
 #include <seal/seal.h>
 #include <seal/secretkey.h>
 #include <seal/util/polyarithsmallmod.h>
+#include <seal/util/rlwe.h>
 
 #include <functional>
 
@@ -76,15 +77,24 @@ static Code LaunchWorks(
   }
 }
 
+// defined in hom_conv2d_ss.cc
 void flood_ciphertext(seal::Ciphertext &ct,
                       std::shared_ptr<seal::UniformRandomGenerator> prng,
                       const seal::SEALContext &context,
                       const seal::Encryptor &pk_encryptor,
                       const seal::Evaluator &evaluator);
 
+// defined in hom_conv2d_ss.cc
 void truncate_for_decryption(seal::Ciphertext &ct,
                              const seal::Evaluator &evaluator,
                              const seal::SEALContext &context);
+
+// defined in hom_conv2d_ss.cc
+Code sample_random_mask(const std::vector<size_t> &targets,
+                        uint64_t *coeffs_buff, size_t buff_size,
+                        seal::Plaintext &mask, seal::parms_id_type pid,
+                        std::shared_ptr<seal::UniformRandomGenerator> prng,
+                        const seal::SEALContext &context);
 
 seal::scheme_type HomFCSS::scheme() const {
   if (context_) {
@@ -467,13 +477,13 @@ Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
         context_->first_context_data()->parms().random_generator()->create();
     for (size_t r_blk = start; r_blk < end; ++r_blk) {
       auto &this_ct = cts.at(r_blk);
+
+      flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_, *evaluator_);
       CHECK_ERR(
           sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
                            this_ct.parms_id(), prng, this_ct.is_ntt_form()),
           "RandomMaskPoly");
       evaluator_->sub_plain_inplace(this_ct, mask);
-
-      flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_, *evaluator_);
 
       auto row_bgn = r_blk * split_shape.rows();
       auto row_end = std::min<size_t>(row_bgn + split_shape.rows(),
@@ -537,48 +547,10 @@ Code HomFCSS::removeUnusedCoeffs(std::vector<seal::Ciphertext> &cts,
 Code HomFCSS::sampleRandomMask(
     const std::vector<size_t> &targets, uint64_t *coeffs_buff, size_t buff_size,
     seal::Plaintext &mask, seal::parms_id_type pid,
-    std::shared_ptr<seal::UniformRandomGenerator> prng, bool is_ntt) const {
-  using namespace seal::util;
+    std::shared_ptr<seal::UniformRandomGenerator> prng, bool /*is_ntt*/) const {
   ENSURE_OR_RETURN(context_, Code::ERR_CONFIG);
-
-  auto cntxt_data = context_->get_context_data(pid);
-  ENSURE_OR_RETURN(cntxt_data != nullptr, Code::ERR_INVALID_ARG);
-  ENSURE_OR_RETURN(!targets.empty(), Code::ERR_INVALID_ARG);
-  ENSURE_OR_RETURN(buff_size >= targets.size(), Code::ERR_OUT_BOUND);
-
-  const size_t N = poly_degree();
-  if (std::any_of(targets.begin(), targets.end(),
-                  [N](size_t c) { return c >= N; })) {
-    return Code::ERR_INVALID_ARG;
-  }
-
-  auto parms = cntxt_data->parms();
-  mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
-  mask.resize(N);
-
-  const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
-  if (prng) {
-    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
-  } else {
-    auto _prng = parms.random_generator()->create();
-    _prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
-  }
-
-  if (IsTwoPower(plain_modulus())) {
-    uint64_t mod_mask = plain_modulus() - 1;
-    std::transform(mask.data(), mask.data() + mask.coeff_count(), mask.data(),
-                   [mod_mask](uint64_t u) { return u & mod_mask; });
-  } else {
-    // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
-    modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
-                       mask.data());
-  }
-
-  auto coeff_ptr = coeffs_buff;
-  for (size_t idx : targets) {
-    *coeff_ptr++ = mask[idx];
-  }
-  return Code::OK;
+  return sample_random_mask(targets, coeffs_buff, buff_size, mask, pid, prng,
+                            *context_);
 }
 
 Code HomFCSS::decryptToVector(const std::vector<seal::Ciphertext> &enc_vector,

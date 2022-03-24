@@ -4,12 +4,16 @@
 #include <seal/seal.h>
 #include <seal/secretkey.h>
 #include <seal/util/polyarithsmallmod.h>
+#include <seal/util/rlwe.h>
 
 #include <functional>
 
 #include "gemini/cheetah/tensor_encoder.h"
 #include "gemini/core/logging.h"
 #include "gemini/core/util/ThreadPool.h"
+
+#define BFV_TRUNCATE_LARGE 0
+#define BFV_TRUNCATE_SMALL 0
 
 namespace gemini {
 
@@ -57,6 +61,49 @@ static inline uint64_t make_bits_mask(int n_low_zeros) {
   n_low_zeros = std::min(63, n_low_zeros);
   return (static_cast<uint64_t>(-1) >> n_low_zeros) << n_low_zeros;
 }
+
+namespace internal {
+void sub_poly_inplace(seal::Ciphertext &ct, const seal::Plaintext &pt,
+                      const seal::SEALContext &context,
+                      const seal::Evaluator &evaluator) {
+  if (ct.size() != 2) {
+    LOG(FATAL) << "sub_poly_inplace: invalid ct.size()";
+    return;
+  }
+
+  if (pt.parms_id() == seal::parms_id_zero) {
+    if (pt.coeff_count() != ct.poly_modulus_degree()) {
+      LOG(FATAL) << "sub_poly_inplace: invalid pt.coeff_count()";
+      return;
+    }
+    evaluator.sub_plain_inplace(ct, pt);
+    return;
+  }
+
+  auto n = ct.poly_modulus_degree();
+  auto L = ct.coeff_modulus_size();
+  if (pt.coeff_count() != n * L) {
+    LOG(FATAL) << "sub_poly_inplace: invalid pt.coeff_count()";
+    return;
+  }
+
+  auto cntxt = context.get_context_data(ct.parms_id());
+  if (!cntxt) {
+    LOG(FATAL) << "sub_poly_inplace: invalid ct.parms_id()";
+  }
+
+  auto &coeff_modulus = cntxt->parms().coeff_modulus();
+  auto src_ptr = pt.data();
+  auto dst_ptr = ct.data(0);
+  for (size_t l = 0; l < L; ++l) {
+    seal::util::sub_poly_coeffmod(dst_ptr, src_ptr, n, coeff_modulus[l],
+                                  dst_ptr);
+    dst_ptr += n;
+    src_ptr += n;
+  }
+}
+
+};  // namespace internal
 
 void remove_unused_coeffs(seal::Ciphertext &ct,
                           const seal::Evaluator &evaluator,
@@ -129,6 +176,100 @@ static void set_poly_coeffs_uniform(
   }
 }
 
+#if USE_APPROX_RESHARE
+Code sample_random_mask(const std::vector<size_t> &targets,
+                        uint64_t *coeffs_buff, size_t buff_size,
+                        seal::Plaintext &mask, seal::parms_id_type pid,
+                        std::shared_ptr<seal::UniformRandomGenerator> prng,
+                        const seal::SEALContext &context) {
+  using namespace seal::util;
+
+  auto cntxt_data = context.get_context_data(pid);
+  ENSURE_OR_RETURN(cntxt_data != nullptr, Code::ERR_INVALID_ARG);
+  ENSURE_OR_RETURN(!targets.empty(), Code::ERR_INVALID_ARG);
+  ENSURE_OR_RETURN(buff_size >= targets.size(), Code::ERR_OUT_BOUND);
+  ENSURE_OR_RETURN(prng != nullptr, Code::ERR_NULL_POINTER);
+
+  auto parms = cntxt_data->parms();
+  auto &modulus = parms.coeff_modulus();
+  const size_t N = parms.poly_modulus_degree();
+  const size_t L = modulus.size();
+  if (std::any_of(targets.begin(), targets.end(),
+                  [N](size_t c) { return c >= N; })) {
+    return Code::ERR_INVALID_ARG;
+  }
+
+  mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
+  mask.resize(N * L);
+  // sample in [0, Q) in RNS form
+  sample_poly_uniform(prng, parms, mask.data());
+  mask.parms_id() = cntxt_data->parms_id();
+
+  std::vector<uint64_t> coeffs_rns(targets.size() * L);
+  auto src_ptr = mask.data();
+  auto dst_ptr = coeffs_rns.data();
+  for (size_t l = 0; l < L; ++l) {
+    for (size_t idx : targets) {
+      *dst_ptr++ = src_ptr[idx];
+    }
+    src_ptr += N;
+  }
+  // r in [0, Q) -> round(Q/t*r) mod t
+  ConstRNSIter wrap(coeffs_rns.data(), targets.size());
+  cntxt_data->rns_tool()->decrypt_scale_and_round(
+      wrap, coeffs_buff, seal::MemoryManager::GetPool());
+  return Code::OK;
+}
+#else
+Code sample_random_mask(const std::vector<size_t> &targets,
+                        uint64_t *coeffs_buff, size_t buff_size,
+                        seal::Plaintext &mask, seal::parms_id_type pid,
+                        std::shared_ptr<seal::UniformRandomGenerator> prng,
+                        const seal::SEALContext &context) {
+  using namespace seal::util;
+
+  auto cntxt_data = context.get_context_data(pid);
+  ENSURE_OR_RETURN(cntxt_data != nullptr, Code::ERR_INVALID_ARG);
+  ENSURE_OR_RETURN(!targets.empty(), Code::ERR_INVALID_ARG);
+  ENSURE_OR_RETURN(buff_size >= targets.size(), Code::ERR_OUT_BOUND);
+  ENSURE_OR_RETURN(prng != nullptr, Code::ERR_NULL_POINTER);
+
+  const size_t N = poly_degree();
+  if (std::any_of(targets.begin(), targets.end(),
+                  [N](size_t c) { return c >= N; })) {
+    return Code::ERR_INVALID_ARG;
+  }
+
+  auto parms = cntxt_data->parms();
+  mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
+  mask.resize(N);
+
+  const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
+  if (prng) {
+    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
+  } else {
+    auto _prng = parms.random_generator()->create();
+    _prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
+  }
+
+  if (IsTwoPower(plain_modulus())) {
+    uint64_t mod_mask = plain_modulus() - 1;
+    std::transform(mask.data(), mask.data() + mask.coeff_count(), mask.data(),
+                   [mod_mask](uint64_t u) { return u & mod_mask; });
+  } else {
+    // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
+    modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
+                       mask.data());
+  }
+
+  auto coeff_ptr = coeffs_buff;
+  for (size_t idx : targets) {
+    *coeff_ptr++ = mask[idx];
+  }
+  return Code::OK;
+}
+#endif
+
 void flood_ciphertext(seal::Ciphertext &ct,
                       std::shared_ptr<seal::UniformRandomGenerator> prng,
                       const seal::SEALContext &context,
@@ -150,7 +291,8 @@ void flood_ciphertext(seal::Ciphertext &ct,
     return;
   }
 
-  // NOTE(wen-jie) adding encryption-zero with larger noise.
+#if !USE_APPROX_RESHARE
+  // NOTE(wen-jie) adding encryption-zero with larger noise
   auto &parms = cntxt_data->parms();
   const int noise_len = cntxt_data->total_coeff_modulus_bit_count() -
                         parms.plain_modulus().bit_count() - 1;
@@ -171,6 +313,7 @@ void flood_ciphertext(seal::Ciphertext &ct,
     rns_ptr += n;
     dst_ptr += n;
   }
+#endif
 
   evaluator.mod_switch_to_inplace(ct, context.last_parms_id());
 
@@ -209,9 +352,10 @@ void truncate_for_decryption(seal::Ciphertext &ct,
       parms.coeff_modulus()[0].bit_count() - parms.plain_modulus().bit_count();
   const int one_more_bit = IsTwoPower(parms.plain_modulus().value()) ? 0 : 1;
   const uint64_t mask0 = make_bits_mask(n_delta_bits - 1 - one_more_bit);
+#if !USE_APPROX_RESHARE || BFV_TRUNCATE_LARGE
   std::transform(ct.data(0), ct.data(0) + poly_n, ct.data(0),
                  [mask0](uint64_t u) { return u & mask0; });
-
+#endif
   // Norm |c1 * s|_infty < |c1|_infty * |s|_infty.
   // The value of |c1|_infty * |s|_infty is heuristically bounded by 12. *
   // Std(|c1|_infty) * Std(|s|_infty) Assume |c1| < B is B-bounded uniform. Then
@@ -223,8 +367,10 @@ void truncate_for_decryption(seal::Ciphertext &ct,
   // {-1, 0, 1}.
   n_var_bits = std::log2(heuristic_bound * poly_n * std::sqrt(1 / 18.));
   const uint64_t mask1 = make_bits_mask(n_delta_bits - n_var_bits);
+#if !USE_APPROX_RESHARE || BFV_TRUNCATE_SMALL
   std::transform(ct.data(1), ct.data(1) + poly_n, ct.data(1),
                  [mask1](uint64_t u) { return u & mask1; });
+#endif
 }
 
 seal::scheme_type HomConv2DSS::scheme() const {
@@ -508,42 +654,9 @@ Code HomConv2DSS::sampleRandomMask(
     const std::vector<size_t> &targets, uint64_t *coeffs_buff, size_t buff_size,
     seal::Plaintext &mask, seal::parms_id_type pid,
     std::shared_ptr<seal::UniformRandomGenerator> prng, bool is_ntt) const {
-  using namespace seal::util;
   ENSURE_OR_RETURN(context_, Code::ERR_CONFIG);
-
-  auto cntxt_data = context_->get_context_data(pid);
-  ENSURE_OR_RETURN(cntxt_data != nullptr, Code::ERR_INVALID_ARG);
-  ENSURE_OR_RETURN(!targets.empty(), Code::ERR_INVALID_ARG);
-  ENSURE_OR_RETURN(buff_size >= targets.size(), Code::ERR_OUT_BOUND);
-
-  const size_t N = poly_degree();
-  if (std::any_of(targets.begin(), targets.end(),
-                  [N](size_t c) { return c >= N; })) {
-    return Code::ERR_INVALID_ARG;
-  }
-
-  auto parms = cntxt_data->parms();
-
-  mask.parms_id() = seal::parms_id_zero;  // foo SEAL when using BFV
-  mask.resize(N);
-
-  const size_t nbytes = mul_safe(mask.coeff_count(), sizeof(uint64_t));
-  if (prng) {
-    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
-  } else {
-    auto _prng = parms.random_generator()->create();
-    prng->generate(nbytes, reinterpret_cast<std::byte *>(mask.data()));
-  }
-
-  // TODO(wen-jie): to use reject sampling to obtain uniform in [0, t).
-  modulo_poly_coeffs(mask.data(), mask.coeff_count(), parms.plain_modulus(),
-                     mask.data());
-
-  auto coeff_ptr = coeffs_buff;
-  for (size_t idx : targets) {
-    *coeff_ptr++ = mask[idx];
-  }
-  return Code::OK;
+  return sample_random_mask(targets, coeffs_buff, buff_size, mask, pid, prng,
+                            *context_);
 }
 
 Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
@@ -595,15 +708,13 @@ Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
           }
           auto &this_ct = enc_tensor.at(cid++);
 
+          flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_,
+                           *evaluator_);
           CHECK_ERR(
               sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
                                this_ct.parms_id(), prng, this_ct.is_ntt_form()),
               "RandomMaskPoly");
-
-          evaluator_->sub_plain_inplace(this_ct, mask);
-
-          flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_,
-                           *evaluator_);
+          internal::sub_poly_inplace(this_ct, mask, *context_, *evaluator_);
 
           auto coeff_ptr = coeffs.data();
           for (long h = 0; h < slice_shape.height(); ++h) {

@@ -28,6 +28,12 @@ include_directories(include)
 add_subdirectory(include)
 target_link_libraries(gemini SEAL::seal Eigen3::Eigen Threads::Threads)
 
+if (USE_APPROX_RESHARE)
+  target_compile_definitions(gemini PUBLIC USE_APPROX_RESHARE=1)
+else()
+  target_compile_definitions(gemini PUBLIC USE_APPROX_RESHARE=0)
+endif()
+
 ## SCI
 add_subdirectory(SCI)
 include_directories(SCI/src/)
