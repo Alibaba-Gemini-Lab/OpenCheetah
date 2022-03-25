@@ -12,8 +12,8 @@
 #include "gemini/core/logging.h"
 #include "gemini/core/util/ThreadPool.h"
 
-#define BFV_TRUNCATE_LARGE 0
-#define BFV_TRUNCATE_SMALL 0
+#define BFV_TRUNCATE_LARGE 1
+#define BFV_TRUNCATE_SMALL 1
 
 namespace gemini {
 
@@ -272,17 +272,79 @@ Code sample_random_mask(const std::vector<size_t> &targets,
 }
 #endif
 
+static void asymmetric_encrypt_zero(
+    const seal::SEALContext &context, const seal::PublicKey &public_key,
+    const seal::parms_id_type parms_id, bool is_ntt_form,
+    std::shared_ptr<seal::UniformRandomGenerator> prng,
+    seal::Ciphertext &destination) {
+  using namespace seal;
+  using namespace seal::util;
+  // We use a fresh memory pool with `clear_on_destruction' enabled
+  MemoryPoolHandle pool =
+      MemoryManager::GetPool(mm_prof_opt::mm_force_new, true);
+
+  auto &context_data = *context.get_context_data(parms_id);
+  auto &parms = context_data.parms();
+  auto &coeff_modulus = parms.coeff_modulus();
+  size_t coeff_modulus_size = coeff_modulus.size();
+  size_t coeff_count = parms.poly_modulus_degree();
+  auto ntt_tables = context_data.small_ntt_tables();
+  size_t encrypted_size = public_key.data().size();
+
+  // Make destination have right size and parms_id
+  // Ciphertext (c_0,c_1, ...)
+  destination.resize(context, parms_id, encrypted_size);
+  destination.is_ntt_form() = is_ntt_form;
+  destination.scale() = 1.0;
+
+  // Generate u <-- R_3
+  auto u(allocate_poly(coeff_count, coeff_modulus_size, pool));
+  sample_poly_ternary(prng, parms, u.get());
+
+  // c[j] = u * public_key[j]
+  for (size_t i = 0; i < coeff_modulus_size; i++) {
+    ntt_negacyclic_harvey_lazy(u.get() + i * coeff_count, ntt_tables[i]);
+    for (size_t j = 0; j < encrypted_size; j++) {
+      dyadic_product_coeffmod(u.get() + i * coeff_count,
+                              public_key.data().data(j) + i * coeff_count,
+                              coeff_count, coeff_modulus[i],
+                              destination.data(j) + i * coeff_count);
+
+      // Addition with e_0, e_1 is in non-NTT form
+      if (!is_ntt_form) {
+        inverse_ntt_negacyclic_harvey(destination.data(j) + i * coeff_count,
+                                      ntt_tables[i]);
+      }
+    }
+  }
+
+  // Generate e_j <-- chi
+  // c[j] = public_key[j] * u + e[j]
+#if USE_APPROX_RESHARE
+  // NOTE(wen-jie) we skip e[0] here since e[0] is replaced by the secret sharing random.
+  for (size_t j = 1; j < encrypted_size; j++) {
+#else
+  for (size_t j = 0; j < encrypted_size; j++) {
+#endif
+    SEAL_NOISE_SAMPLER(prng, parms, u.get());
+    for (size_t i = 0; i < coeff_modulus_size; i++) {
+      // Addition with e_0, e_1 is in NTT form
+      if (is_ntt_form) {
+        ntt_negacyclic_harvey(u.get() + i * coeff_count, ntt_tables[i]);
+      }
+      add_poly_coeffmod(
+          u.get() + i * coeff_count, destination.data(j) + i * coeff_count,
+          coeff_count, coeff_modulus[i], destination.data(j) + i * coeff_count);
+    }
+  }
+}
+
 void flood_ciphertext(seal::Ciphertext &ct,
                       std::shared_ptr<seal::UniformRandomGenerator> prng,
                       const seal::SEALContext &context,
-                      const seal::Encryptor &pk_encryptor,
+                      const seal::PublicKey &pk,
                       const seal::Evaluator &evaluator) {
   if (ct.size() != 2) {
-    LOG(WARNING) << "flood_ciphertext: ct.size() should be 2";
-    return;
-  }
-
-  if (ct.coeff_modulus_size() == 1) {
     LOG(WARNING) << "flood_ciphertext: demands more coeff_modulus";
     return;
   }
@@ -320,8 +382,11 @@ void flood_ciphertext(seal::Ciphertext &ct,
   evaluator.mod_switch_to_inplace(ct, context.last_parms_id());
 
   seal::Ciphertext zero;
-  pk_encryptor.encrypt_zero(ct.parms_id(), zero);
+  asymmetric_encrypt_zero(context, pk, ct.parms_id(), ct.is_ntt_form(), prng, zero);
   evaluator.add_inplace(ct, zero);
+  if (ct.is_ntt_form()) {
+    evaluator.transform_from_ntt_inplace(ct);
+  }
 }
 
 void truncate_for_decryption(seal::Ciphertext &ct,
@@ -421,7 +486,7 @@ Code HomConv2DSS::setUp(const seal::SEALContext &context,
       return Code::ERR_INVALID_ARG;
     }
 
-    pk_encryptor_ = std::make_shared<seal::Encryptor>(*context_, *pk);
+    pk_ = std::make_shared<seal::PublicKey>(*pk);
   }
 
   tencoder_ = std::make_shared<TensorEncoder>(*context_);
@@ -619,12 +684,6 @@ Code HomConv2DSS::conv2DSS(
       if (used == (size_t)-1 || used != n_one_channel) {
         return Code::ERR_INTERNAL;
       }
-
-      for (size_t i = 0; i < used; ++i) {
-        if (ct_start[i].is_ntt_form()) {
-          evaluator_->transform_from_ntt_inplace(ct_start[i]);
-        }
-      }
     };
 
     return Code::OK;
@@ -664,7 +723,7 @@ Code HomConv2DSS::sampleRandomMask(
 Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
                                 Tensor<uint64_t> &mask_tensor, const Meta &meta,
                                 size_t nthreads) const {
-  ENSURE_OR_RETURN(pk_encryptor_, Code::ERR_CONFIG);
+  ENSURE_OR_RETURN(pk_, Code::ERR_CONFIG);
 
   TensorShape strided_ishape;
   std::array<int, 2> pads{0};
@@ -710,8 +769,7 @@ Code HomConv2DSS::addRandomMask(std::vector<seal::Ciphertext> &enc_tensor,
           }
           auto &this_ct = enc_tensor.at(cid++);
 
-          flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_,
-                           *evaluator_);
+          flood_ciphertext(this_ct, prng, *context_, *pk_, *evaluator_);
           CHECK_ERR(
               sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
                                this_ct.parms_id(), prng, this_ct.is_ntt_form()),

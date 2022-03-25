@@ -81,7 +81,7 @@ static Code LaunchWorks(
 void flood_ciphertext(seal::Ciphertext &ct,
                       std::shared_ptr<seal::UniformRandomGenerator> prng,
                       const seal::SEALContext &context,
-                      const seal::Encryptor &pk_encryptor,
+                      const seal::PublicKey &pk,
                       const seal::Evaluator &evaluator);
 
 // defined in hom_conv2d_ss.cc
@@ -148,7 +148,7 @@ Code HomFCSS::setUp(const seal::SEALContext &context,
       return Code::ERR_INVALID_ARG;
     }
 
-    pk_encryptor_ = std::make_shared<seal::Encryptor>(*context_, *pk);
+    pk_ = std::make_shared<seal::PublicKey>(*pk);
   }
   evaluator_ = std::make_shared<seal::Evaluator>(*context_);
   return Code::OK;
@@ -463,7 +463,7 @@ Code HomFCSS::matVecMul(const std::vector<std::vector<seal::Plaintext>> &matrix,
 Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
                             Tensor<uint64_t> &mask_vector, const Meta &meta,
                             gemini::ThreadPool &tpool) const {
-  ENSURE_OR_RETURN(pk_encryptor_, Code::ERR_CONFIG);
+  ENSURE_OR_RETURN(pk_, Code::ERR_CONFIG);
   TensorShape split_shape = getSplit(meta, poly_degree());
   const size_t n_ct_out =
       CeilDiv<size_t>(meta.weight_shape.rows(), split_shape.rows());
@@ -484,12 +484,12 @@ Code HomFCSS::addRandomMask(std::vector<seal::Ciphertext> &cts,
     for (size_t r_blk = start; r_blk < end; ++r_blk) {
       auto &this_ct = cts.at(r_blk);
 
-      flood_ciphertext(this_ct, prng, *context_, *pk_encryptor_, *evaluator_);
+      flood_ciphertext(this_ct, prng, *context_, *pk_, *evaluator_);
       CHECK_ERR(
           sampleRandomMask(targets, coeffs.data(), coeffs.size(), mask,
                            this_ct.parms_id(), prng, this_ct.is_ntt_form()),
           "RandomMaskPoly");
-	  internal::sub_poly_inplace(this_ct, mask, *context_, *evaluator_);
+      internal::sub_poly_inplace(this_ct, mask, *context_, *evaluator_);
 
       auto row_bgn = r_blk * split_shape.rows();
       auto row_end = std::min<size_t>(row_bgn + split_shape.rows(),

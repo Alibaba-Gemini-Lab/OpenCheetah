@@ -109,7 +109,7 @@ class HomConv2DSS {
   std::shared_ptr<TensorEncoder> tencoder_{nullptr};
   std::shared_ptr<seal::Evaluator> evaluator_{nullptr};
   std::shared_ptr<seal::Encryptor> encryptor_{nullptr};
-  std::shared_ptr<seal::Encryptor> pk_encryptor_{nullptr};
+  std::shared_ptr<seal::PublicKey> pk_{nullptr};
 
   std::optional<seal::SecretKey> sk_{std::nullopt};
 };
