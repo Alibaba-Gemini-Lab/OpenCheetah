@@ -7502,7 +7502,7 @@ int main(int argc, char** argv)
 {
   ArgMapping amap;
   amap.arg("r", party, "Role of party: ALICE/SERVER = 1; BOB/CLIENT = 2");
-  amap.arg("port", port, "Port Number");
+  amap.arg("p", port, "Port Number");
   amap.arg("ip", address, "IP Address of server (ALICE)");
   amap.arg("nt", num_threads, "Number of Threads");
   amap.arg("ell", bitlength, "Uniform Bitwidth");

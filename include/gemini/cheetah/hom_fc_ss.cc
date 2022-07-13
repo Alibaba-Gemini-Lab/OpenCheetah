@@ -411,6 +411,16 @@ Code HomFCSS::matVecMul(const std::vector<std::vector<seal::Plaintext>> &matrix,
     ENSURE_OR_RETURN(c.size() == n_ct_in, Code::ERR_INVALID_ARG);
   }
 
+  for (const auto &rows : matrix) {
+    for (const auto &submat : rows) {
+      if (submat.is_zero()) {
+        LOG(WARNING) << "matVecMul: sub-matrix with all zero is not supported.\
+	                 Maybe to use a larger fixed-point scaling factor\n";
+        return size_t(-1);
+      }
+    }
+  }
+
   if (meta.is_shared_input && vec_share1.size() != n_ct_in) {
     return Code::ERR_DIM_MISMATCH;
   }
