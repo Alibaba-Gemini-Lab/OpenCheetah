@@ -2,6 +2,8 @@
 This repo contains a proof-of-concept implementation for our [Cheetah paper](https://eprint.iacr.org/2022/207).
 The codes are still under heavy developments, and **should not** be used in any security sensitive product.
 
+Cheetah could also be used to solve problems beyond NN inference, check the [SecretFlow](https://github.com/secretflow) project.
+
 ### Repo Directory Description
 - `include/` Contains implementation of Cheetah's linear protocols.
 - `SCI/` A fork of CryptFlow2's SCI library and contains implementation of Cheetah's non-linear protocols.
