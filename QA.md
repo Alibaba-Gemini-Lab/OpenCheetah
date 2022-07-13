@@ -1,8 +1,8 @@
 ## Q&A
 * Q: how to run other network and data ?
 
-  A: OpenCheetah is built on top of the SCI library to neural network inference. 
-     To test on new network and dataset, just use the scripts provided by in the [EzPC project](https://github.com/mpc-msri/EzPC/tree/master/Athos)
+  A: OpenCheetah is built on top of the SCI library for neural network inference. 
+     To test on new network and dataset, just use the scripts provided in the [EzPC project](https://github.com/mpc-msri/EzPC/tree/master/Athos)
 
 * Q: The program throws `result ciphertext is transparent` logic_error
 	

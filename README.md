@@ -4,6 +4,9 @@ The codes are still under heavy developments, and **should not** be used in any 
 
 Cheetah could also be used to solve problems beyond NN inference, check the [SecretFlow](https://github.com/secretflow) project.
 
+### Q&A (Updating)
+See [QA.md](QA.md).
+
 ### Repo Directory Description
 - `include/` Contains implementation of Cheetah's linear protocols.
 - `SCI/` A fork of CryptFlow2's SCI library and contains implementation of Cheetah's non-linear protocols.

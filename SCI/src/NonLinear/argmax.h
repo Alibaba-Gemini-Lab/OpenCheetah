@@ -104,24 +104,28 @@ public:
     return 0;
   }
 
-  void ArgMaxMPC(int size, type *inpArr, type *maxi, bool get_max_too = false,
-                 type *max_val = nullptr) {
+  void ArgMaxMPC(int size, type *inpArr, type *maxi, bool get_max_too = false, type *max_val = nullptr) {
+
     type *input_temp = new type[size + 16];
     type *input_argmax_temp = new type[size + 16];
+
     for (int i = 0; i < size; i++) {
       input_temp[i] = inpArr[i];
       input_argmax_temp[i] = 0;
     }
+
     if (party == sci::ALICE) {
       for (type i = 0; i < (type)size; i++) {
         input_argmax_temp[i] = i;
       }
     }
+
     if (size & 1) {
       input_temp[size] = input_temp[size - 1];
       input_argmax_temp[size] = input_argmax_temp[size - 1];
       size += 1;
     }
+
     type *compare_with = new type[size + 16];
     type *compare_with_argmax = new type[size + 16];
     type *relu_res = new type[size + 16];
@@ -141,6 +145,7 @@ public:
       if (no_of_nodes_child == 8) {
         times_stuck_on_8++;
       }
+
       if (times_stuck_on_8 >= 5) {
         // The backend code only supports a minimum batch size of 8
         // So, whenever we have less than 8 child nodes, we pad it to get 8
@@ -149,10 +154,12 @@ public:
         // So, times_stuck_on_8 >= 5.
         break;
       }
+
       for (int i = no_of_nodes; i < pad2; i++) {
         input_temp[i] = input_temp[no_of_nodes - 1];
         input_argmax_temp[i] = input_argmax_temp[no_of_nodes - 1];
       }
+
       if (this->algeb_str == FIELD) {
         for (int i = 0; i < (pad2); i += 2) {
           compare_with[i / 2] = sci::neg_mod(
@@ -164,34 +171,32 @@ public:
       } else { // RING
         for (int i = 0; i < (pad2); i += 2) {
           compare_with[i / 2] = (input_temp[i] - input_temp[i + 1]);
-          compare_with_argmax[i / 2] =
-              (input_argmax_temp[i] - input_argmax_temp[i + 1]);
+          compare_with_argmax[i / 2] = (input_argmax_temp[i] - input_argmax_temp[i + 1]);
         }
       }
+
       if (this->l > 32) {
-        argmax_this_level_super_32(argmax_res, relu_res, compare_with_argmax,
-                                   compare_with, no_of_nodes_child);
+        argmax_this_level_super_32(argmax_res, relu_res, compare_with_argmax, compare_with, no_of_nodes_child);
       } else {
-        argmax_this_level_sub_32(argmax_res, relu_res, compare_with_argmax,
-                                 compare_with, no_of_nodes_child);
+        argmax_this_level_sub_32(argmax_res, relu_res, compare_with_argmax, compare_with, no_of_nodes_child);
       }
+
       if (this->algeb_str == FIELD) {
         for (int i = 0; i < (no_of_nodes_child); i++) {
-          input_temp[i] =
-              (relu_res[i] + input_temp[2 * i + 1]) % this->prime_mod;
-          input_argmax_temp[i] =
-              (argmax_res[i] + input_argmax_temp[2 * i + 1]) % this->prime_mod;
+          input_temp[i] = (relu_res[i] + input_temp[2 * i + 1]) % this->prime_mod;
+          input_argmax_temp[i] = (argmax_res[i] + input_argmax_temp[2 * i + 1]) % this->prime_mod;
         }
       } else { // RING
         for (int i = 0; i < (no_of_nodes_child); i++) {
           input_temp[i] = (relu_res[i] + input_temp[2 * i + 1]) & mask_l;
-          input_argmax_temp[i] =
-              (argmax_res[i] + input_argmax_temp[2 * i + 1]) & mask_l;
+          input_argmax_temp[i] = (argmax_res[i] + input_argmax_temp[2 * i + 1]) & mask_l;
         }
       }
       no_of_nodes = no_of_nodes_child;
-    }
+    } // number of nodes > 1
+
     maxi[0] = input_argmax_temp[0];
+
     if (get_max_too) {
       max_val[0] = input_temp[0];
     }
@@ -214,9 +219,9 @@ public:
    *                           Compute ArgMax for a tree level
    **************************************************************************************************/
 
-  void argmax_this_level_super_32(type *argmax, type *result, type *indexshare,
-                                  type *share, int num_relu) {
+  void argmax_this_level_super_32(type *argmax, type *result, type *indexshare, type *share, int num_relu) {
     uint8_t *drelu_ans = new uint8_t[num_relu];
+
     if (this->algeb_str == FIELD) {
       relu_field_oracle->relu(result, share, num_relu, drelu_ans, true);
     } else { // RING
@@ -240,55 +245,46 @@ public:
         additive_masks[i] %= this->prime_mod;
       }
     } else { // RING
-      this->relu_oracle->triple_gen->prg->random_data(
-          additive_masks, 2 * num_relu * sizeof(type));
+      this->relu_oracle->triple_gen->prg->random_data(additive_masks, 2 * num_relu * sizeof(type));
     }
 
     if (party == sci::ALICE) {
+
       for (int i = 0; i < num_relu; i++) {
-        set_argmax_end_ot_messages_super_32(
-            ot_messages_0 + i, ot_messages_1 + i, share + i, indexshare + i,
-            drelu_ans + i, ((type *)additive_masks) + i, num_relu);
+        set_argmax_end_ot_messages_super_32(ot_messages_0 + i, ot_messages_1 + i, share + i, indexshare + i, drelu_ans + i, ((type *)additive_masks) + i, num_relu);
       }
+
       if (this->algeb_str == FIELD) {
-        relu_field_oracle->otpack->iknp_straight->send(ot_messages_0,
-                                                       ot_messages_1, num_relu);
-        relu_field_oracle->otpack->iknp_reversed->recv(
-            received_shares, (bool *)drelu_ans, num_relu);
+        relu_field_oracle->otpack->iknp_straight->send(ot_messages_0, ot_messages_1, num_relu);
+        relu_field_oracle->otpack->iknp_reversed->recv(received_shares, (bool *)drelu_ans, num_relu);
       } else {
-        relu_oracle->otpack->iknp_straight->send(ot_messages_0, ot_messages_1,
-                                                 num_relu);
-        relu_oracle->otpack->iknp_reversed->recv(received_shares,
-                                                 (bool *)drelu_ans, num_relu);
+        relu_oracle->otpack->iknp_straight->send(ot_messages_0, ot_messages_1, num_relu);
+        relu_oracle->otpack->iknp_reversed->recv(received_shares, (bool *)drelu_ans, num_relu);
       }
     } else // party = sci::BOB
     {
       for (int i = 0; i < num_relu; i++) {
-        set_argmax_end_ot_messages_super_32(
-            ot_messages_0 + i, ot_messages_1 + i, share + i, indexshare + i,
-            drelu_ans + i, ((type *)additive_masks) + i, num_relu);
+        set_argmax_end_ot_messages_super_32(ot_messages_0 + i, ot_messages_1 + i, share + i, indexshare + i, drelu_ans + i, ((type *)additive_masks) + i, num_relu);
       }
+
       if (this->algeb_str == FIELD) {
-        relu_field_oracle->otpack->iknp_straight->recv(
-            received_shares, (bool *)drelu_ans, num_relu);
-        relu_field_oracle->otpack->iknp_reversed->send(ot_messages_0,
-                                                       ot_messages_1, num_relu);
+        relu_field_oracle->otpack->iknp_straight->recv(received_shares, (bool *)drelu_ans, num_relu);
+        relu_field_oracle->otpack->iknp_reversed->send(ot_messages_0, ot_messages_1, num_relu);
       } else {
-        relu_oracle->otpack->iknp_straight->recv(received_shares,
-                                                 (bool *)drelu_ans, num_relu);
-        relu_oracle->otpack->iknp_reversed->send(ot_messages_0, ot_messages_1,
-                                                 num_relu);
+        relu_oracle->otpack->iknp_straight->recv(received_shares, (bool *)drelu_ans, num_relu);
+        relu_oracle->otpack->iknp_reversed->send(ot_messages_0, ot_messages_1, num_relu);
       }
     }
+
     for (int i = 0; i < num_relu; i++) {
       received_shares_0[i] = _mm_extract_epi64(received_shares[i], 1);
       received_shares_1[i] = _mm_extract_epi64(received_shares[i], 0);
     }
+
     for (int i = 0; i < num_relu; i++) {
-      result[i] = ((type *)additive_masks)[i] +
-                  ((type *)received_shares_0)[(8 / sizeof(type)) * i];
-      argmax[i] = ((type *)additive_masks)[i + num_relu] +
-                  ((type *)received_shares_1)[(8 / sizeof(type)) * i];
+      result[i] = ((type *)additive_masks)[i] + ((type *)received_shares_0)[(8 / sizeof(type)) * i];
+      argmax[i] = ((type *)additive_masks)[i + num_relu] + ((type *)received_shares_1)[(8 / sizeof(type)) * i];
+
       if (this->algeb_str == FIELD) {
         result[i] %= this->prime_mod;
         argmax[i] %= this->prime_mod;
