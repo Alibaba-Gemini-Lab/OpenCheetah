@@ -415,8 +415,8 @@ Code HomFCSS::matVecMul(const std::vector<std::vector<seal::Plaintext>> &matrix,
     for (const auto &submat : rows) {
       if (submat.is_zero()) {
         LOG(WARNING) << "matVecMul: sub-matrix with all zero is not supported.\
-	                 Maybe to use a larger fixed-point scaling factor\n";
-        return size_t(-1);
+	                     Maybe to use a larger fixed-point scaling factor\n";
+		return Code::ERR_INVALID_ARG;
       }
     }
   }
