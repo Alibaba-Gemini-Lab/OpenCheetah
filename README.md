@@ -2,7 +2,8 @@
 This repo contains a proof-of-concept implementation for our [Cheetah paper](https://eprint.iacr.org/2022/207).
 The codes are still under heavy developments, and **should not** be used in any security sensitive product.
 
-Cheetah could also be used to solve problems beyond NN inference, check the [SecretFlow](https://github.com/secretflow) project.
+### Cheetah -> Secure Processing Unit
+Most of the Cheetah protocols has been re-written in the [SecretFlow](https://github.com/secretflow) project. Check the code [here](https://github.com/secretflow/spu/tree/main/libspu/mpc/cheetah).
 
 ### Q&A (Updating)
 See [QA.md](QA.md).
