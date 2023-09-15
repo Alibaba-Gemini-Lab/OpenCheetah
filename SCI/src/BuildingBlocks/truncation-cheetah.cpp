@@ -1,7 +1,7 @@
 // Author: Zhichong Huang
 void Truncation::truncate(int32_t dim, uint64_t *inA, uint64_t *outB,
                           int32_t shift, int32_t bw, bool signed_arithmetic,
-                          uint8_t *msb_x) {
+                          uint8_t *msb_x, bool apply_msb0_heuristic) {
   if (msb_x != nullptr)
     return truncate(dim, inA, outB, shift, bw, signed_arithmetic, msb_x);
 
@@ -17,8 +17,26 @@ void Truncation::truncate(int32_t dim, uint64_t *inA, uint64_t *outB,
   uint64_t mask_upper =
       ((bw - shift) == 64 ? -1 : ((1ULL << (bw - shift)) - 1));
 
-  uint64_t *inA_orig = new uint64_t[dim];
+  if (apply_msb0_heuristic) {
+    if (party == sci::BOB) {
+      const int m = bw - 3;
+      std::vector<uint64_t> adjust(dim);
+      uint64_t big_positive = 1UL << m;
+      std::transform(inA, inA + dim, adjust.data(),
+                     [&](uint64_t x) { return (x + big_positive) & mask_bw; });
 
+      truncate_msb0(dim, adjust.data(), outB, shift, bw, signed_arithmetic);
+      // Tr(x + 2^m, 2^f) = x/2^f + 2^{m - f}
+      uint64_t offset = 1UL << (m - shift);
+      std::transform(outB, outB + dim, outB,
+                     [&](uint64_t x) { return (x - offset) & mask_bw; });
+    } else {
+      truncate_msb0(dim, inA, outB, shift, bw, signed_arithmetic);
+    }
+    return;
+  }
+
+  uint64_t *inA_orig = new uint64_t[dim];
   if (signed_arithmetic && (party == sci::ALICE)) {
     for (int i = 0; i < dim; i++) {
       inA_orig[i] = inA[i];

@@ -62,9 +62,11 @@ public:
       // signed truncation?
       bool signed_arithmetic = true,
       // msb of input vector elements
-      uint8_t *msb_x = nullptr);
+      uint8_t *msb_x = nullptr,
+      // add big positive before truncation
+      bool apply_msb0_heuristic = true);
 
-    // Truncate (right-shift) by shift in the same ring (round towards -inf)
+  // Truncate (right-shift) by shift in the same ring (round towards -inf)
   void truncate_msb(
       // Size of vector
       int32_t dim,
@@ -81,8 +83,8 @@ public:
       // msb of input vector elements
       uint8_t *msb_x);
 
-    // Truncate (right-shift) by shift in the same ring (round towards -inf)
-  // All elements have msb equal to 0. 
+  // Truncate (right-shift) by shift in the same ring (round towards -inf)
+  // All elements have msb equal to 0.
   void truncate_msb0(
       // Size of vector
       int32_t dim,
@@ -96,7 +98,6 @@ public:
       int32_t bw,
       // signed truncation?
       bool signed_arithmetic = true);
-
 
   // Divide by 2^shift in the same ring (round towards 0)
   void div_pow2(

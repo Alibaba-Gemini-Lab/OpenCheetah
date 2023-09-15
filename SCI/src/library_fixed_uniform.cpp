@@ -84,7 +84,7 @@ void MatMul2D(int32_t s1, int32_t s2, int32_t s3, const intType *A,
     mult->matmul_cross_terms(s1, s2, s3, A, B, C, bitlength, bitlength,
                              bitlength, true, MultMode::Alice_has_B);
   }
-#endif  // USE_LINEAR_UNIFORM
+#endif // USE_LINEAR_UNIFORM
 
   if (party == sci::ALICE) {
     // Now irrespective of whether A is the model or B is the model and whether
@@ -96,21 +96,23 @@ void MatMul2D(int32_t s1, int32_t s2, int32_t s3, const intType *A,
     multUniform->ideal_func(s1, s2, s3, A, B, CTemp);
 #else  // USE_LINEAR_UNIFORM
     mult->matmul_cleartext(s1, s2, s3, A, B, CTemp, true);
-#endif  // USE_LINEAR_UNIFORM
+#endif // USE_LINEAR_UNIFORM
     sci::elemWiseAdd<intType>(s1 * s3, C, CTemp, C);
     delete[] CTemp;
   } else {
     // For minionn kind of hacky runs, switch this off
 #ifndef HACKY_RUN
     if (modelIsA) {
-      for (int i = 0; i < s1 * s2; i++) assert(A[i] == 0);
+      for (int i = 0; i < s1 * s2; i++)
+        assert(A[i] == 0);
     } else {
-      for (int i = 0; i < s1 * s2; i++) assert(B[i] == 0);
+      for (int i = 0; i < s1 * s2; i++)
+        assert(B[i] == 0);
     }
 #endif
   }
 
-#else  // MULTITHREADED_MATMUL is ON
+#else // MULTITHREADED_MATMUL is ON
   int required_num_threads = num_threads;
   if (s2 < num_threads) {
     required_num_threads = s2;
@@ -142,22 +144,25 @@ void MatMul2D(int32_t s1, int32_t s2, int32_t s3, const intType *A,
     multUniform->ideal_func(s1, s2, s3, A, B, CTemp);
 #else  // USE_LINEAR_UNIFORM
     mult->matmul_cleartext(s1, s2, s3, A, B, CTemp, true);
-#endif  // USE_LINEAR_UNIFORM
+#endif // USE_LINEAR_UNIFORM
     sci::elemWiseAdd<intType>(s1 * s3, C, CTemp, C);
     delete[] CTemp;
   } else {
     // For minionn kind of hacky runs, switch this off
 #ifndef HACKY_RUN
     if (modelIsA) {
-      for (int i = 0; i < s1 * s2; i++) assert(A[i] == 0);
+      for (int i = 0; i < s1 * s2; i++)
+        assert(A[i] == 0);
     } else {
-      for (int i = 0; i < s1 * s2; i++) assert(B[i] == 0);
+      for (int i = 0; i < s1 * s2; i++)
+        assert(B[i] == 0);
     }
 #endif
   }
 #endif
   intType moduloMask = (1ULL << bitlength) - 1;
-  if (bitlength == 64) moduloMask = -1;
+  if (bitlength == 64)
+    moduloMask = -1;
   for (int i = 0; i < s1 * s3; i++) {
     C[i] = C[i] & moduloMask;
   }
@@ -456,7 +461,7 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
 
     Conv2DWrapper_pt(N, H, W, CI, FH, FW, CO, zPadHLeft, zPadHRight, zPadWLeft,
                      zPadWRight, strideH, strideW, VinputVec, VfilterVec,
-                     VoutputVec);  // consSF = 0
+                     VoutputVec); // consSF = 0
 
     bool pass = true;
     for (int i = 0; i < N; i++) {
@@ -601,7 +606,7 @@ void ElemWiseActModelVectorMult(int32_t size, intType *inArr,
       assert(multArrVec[i] == 0 && "Client's share of model is non-zero.");
     }
   }
-#endif  // SCI_OT
+#endif // SCI_OT
 
 #ifdef SCI_HE
   std::vector<uint64_t> tempInArr(size);
@@ -626,9 +631,8 @@ void ElemWiseActModelVectorMult(int32_t size, intType *inArr,
   uint64_t curComm;
   FIND_ALL_IO_TILL_NOW(curComm);
   BatchNormCommSent += curComm;
-  std::cout << "Time in sec for current BN = [" << (temp / 1000.0)
-            << "] sent [" << (curComm / 1024. / 1024.) << "] MB"
-            << std::endl;
+  std::cout << "Time in sec for current BN = [" << (temp / 1000.0) << "] sent ["
+            << (curComm / 1024. / 1024.) << "] MB" << std::endl;
 #endif
 
 #ifdef VERIFY_LAYERWISE
@@ -746,25 +750,28 @@ void ArgMax(int32_t s1, int32_t s2, intType *inArr, intType *outArr) {
 #endif
 }
 
-void Relu(int32_t size, intType *inArr, intType *outArr, int sf, bool doTruncation) {
+void Relu(int32_t size, intType *inArr, intType *outArr, int sf,
+          bool doTruncation) {
 #ifdef LOG_LAYERWISE
   INIT_ALL_IO_DATA_SENT;
   INIT_TIMER;
 #endif
 
   static int ctr = 1;
-  printf("Relu #%d on %d points, truncate=%d by %d bits\n", ctr++, size, doTruncation, sf);
+  printf("Relu #%d on %d points, truncate=%d by %d bits\n", ctr++, size,
+         doTruncation, sf);
   ctr++;
 
   intType moduloMask = sci::all1Mask(bitlength);
-  int eightDivElemts = ((size + 8 - 1) / 8) * 8;  //(ceil of s1*s2/8.0)*8
+  int eightDivElemts = ((size + 8 - 1) / 8) * 8; //(ceil of s1*s2/8.0)*8
   uint8_t *msbShare = new uint8_t[eightDivElemts];
   intType *tempInp = new intType[eightDivElemts];
   intType *tempOutp = new intType[eightDivElemts];
   sci::copyElemWisePadded(size, inArr, eightDivElemts, tempInp, 0);
 
-#ifndef MULTITHREADED_NONLIN
-  relu->relu(tempOutp, tempInp, eightDivElemts, nullptr);
+// #ifndef MULTITHREADED_NONLIN
+#if 0
+  relu->relu(tempOutp, tempInp, eightDivElemts, nullptr, doTruncation, true);
 #else
   std::thread relu_threads[num_threads];
   int chunk_size = (eightDivElemts / (8 * num_threads)) * 8;
@@ -776,7 +783,9 @@ void Relu(int32_t size, intType *inArr, intType *outArr, int sf, bool doTruncati
     } else {
       lnum_relu = chunk_size;
     }
-    relu_threads[i] = std::thread(funcReLUThread, i, tempOutp + offset, tempInp + offset, lnum_relu, nullptr, false);
+    relu_threads[i] =
+        std::thread(funcReLUThread, i, tempOutp + offset, tempInp + offset,
+                    lnum_relu, nullptr, false, doTruncation, /*approx*/ true);
   }
   for (int i = 0; i < num_threads; ++i) {
     relu_threads[i].join();
@@ -786,7 +795,8 @@ void Relu(int32_t size, intType *inArr, intType *outArr, int sf, bool doTruncati
 #ifdef LOG_LAYERWISE
   auto temp = TIMER_TILL_NOW;
   ReluTimeInMilliSec += temp;
-  std::cout << "Time in sec for current relu = " << (temp / 1000.0) << std::endl;
+  std::cout << "Time in sec for current relu = " << (temp / 1000.0)
+            << std::endl;
   uint64_t curComm;
   FIND_ALL_IO_TILL_NOW(curComm);
   ReluCommSent += curComm;
@@ -798,7 +808,7 @@ void Relu(int32_t size, intType *inArr, intType *outArr, int sf, bool doTruncati
     INIT_TIMER;
 #endif
     for (int i = 0; i < eightDivElemts; i++) {
-      msbShare[i] = 0;  // After relu, all numbers are +ve
+      msbShare[i] = 0; // After relu, all numbers are +ve
     }
 
     intType *tempTruncOutp = new intType[eightDivElemts];
@@ -808,13 +818,16 @@ void Relu(int32_t size, intType *inArr, intType *outArr, int sf, bool doTruncati
     }
 
 #if USE_CHEETAH == 0
-    funcTruncateTwoPowerRingWrapper(eightDivElemts, tempOutp, tempTruncOutp, sf, bitlength, true, msbShare);
+    funcTruncateTwoPowerRingWrapper(eightDivElemts, tempOutp, tempTruncOutp, sf,
+                                    bitlength, true, msbShare);
 #else
-    funcReLUTruncateTwoPowerRingWrapper(eightDivElemts, tempOutp, tempTruncOutp, sf, bitlength, true);
+    funcReLUTruncateTwoPowerRingWrapper(eightDivElemts, tempOutp, tempTruncOutp,
+                                        sf, bitlength, true);
 #endif
 
 #else
-    funcFieldDivWrapper<intType>(eightDivElemts, tempOutp, tempTruncOutp, 1ULL << sf, msbShare);
+    funcFieldDivWrapper<intType>(eightDivElemts, tempOutp, tempTruncOutp,
+                                 1ULL << sf, msbShare);
 #endif
     memcpy(outArr, tempTruncOutp, size * sizeof(intType));
     delete[] tempTruncOutp;
@@ -868,7 +881,7 @@ void Relu(int32_t size, intType *inArr, intType *outArr, int sf, bool doTruncati
       VinVec[i] = getRingElt(VinArr[i]);
     }
 
-    Relu_pt(size, VinVec, VoutVec, 0, false);  // sf = 0
+    Relu_pt(size, VinVec, VoutVec, 0, false); // sf = 0
 
     bool pass = true;
     for (int i = 0; i < size; i++) {
@@ -930,7 +943,7 @@ void MaxPool(int32_t N, int32_t H, int32_t W, int32_t C, int32_t ksizeH,
 
   uint64_t moduloMask = sci::all1Mask(bitlength);
   int rowsOrig = N * H * W * C;
-  int rows = ((rowsOrig + 8 - 1) / 8) * 8;  //(ceil of rows/8.0)*8
+  int rows = ((rowsOrig + 8 - 1) / 8) * 8; //(ceil of rows/8.0)*8
   int cols = ksizeH * ksizeW;
 
   intType *reInpArr = new intType[rows * cols];
@@ -977,7 +990,7 @@ void MaxPool(int32_t N, int32_t H, int32_t W, int32_t C, int32_t ksizeH,
 
   for (int i = rowsOrig; i < rows; i++) {
     for (int j = 0; j < cols; j++) {
-      reInpArr[i * cols + j] = 0;  // The extra padded values
+      reInpArr[i * cols + j] = 0; // The extra padded values
     }
   }
 
@@ -1306,12 +1319,14 @@ void ScaleDown(int32_t size, intType *inArr, int32_t sf) {
     tempInp[i] = tempInp[i] & moduloMask;
   }
 
-  funcTruncateTwoPowerRingWrapper(eightDivElemts, tempInp, outp, sf, bitlength, true, nullptr);
+  funcTruncateTwoPowerRingWrapper(eightDivElemts, tempInp, outp, sf, bitlength,
+                                  true, nullptr);
 #else
   for (int i = 0; i < eightDivElemts; i++) {
     tempInp[i] = sci::neg_mod(tempInp[i], (int64_t)prime_mod);
   }
-  funcFieldDivWrapper<intType>(eightDivElemts, tempInp, outp, 1ULL << sf, nullptr);
+  funcFieldDivWrapper<intType>(eightDivElemts, tempInp, outp, 1ULL << sf,
+                               nullptr);
 #endif
 
 #ifdef LOG_LAYERWISE
@@ -1371,7 +1386,8 @@ void ScaleDown(int32_t size, intType *inArr, int32_t sf) {
 
   std::memcpy(inArr, outp, sizeof(intType) * size);
   delete[] outp;
-  if (size != eightDivElemts) delete[] tempInp;
+  if (size != eightDivElemts)
+    delete[] tempInp;
 }
 
 void ScaleUp(int32_t size, intType *arr, int32_t sf) {
@@ -1415,7 +1431,8 @@ void StartComputation() {
   checkIfUsingEigen();
   printf("Doing BaseOT ...\n");
   for (int i = 0; i < num_threads; i++) {
-    ioArr[i] = new sci::NetIO(party == sci::ALICE ? nullptr : address.c_str(), port + i, /*quit*/true);
+    ioArr[i] = new sci::NetIO(party == sci::ALICE ? nullptr : address.c_str(),
+                              port + i, /*quit*/ true);
     otInstanceArr[i] = new sci::IKNP<sci::NetIO>(ioArr[i]);
     prgInstanceArr[i] = new sci::PRG128();
     kkotInstanceArr[i] = new sci::KKOT<sci::NetIO>(ioArr[i]);
@@ -1462,7 +1479,6 @@ void StartComputation() {
   backend += "-SCI_OT";
 #endif
 
-
 #ifdef SCI_HE
   relu = new ReLUFieldProtocol<sci::NetIO, intType>(
       party, FIELD, io, bitlength, MILL_PARAM, prime_mod, otpack);
@@ -1501,14 +1517,18 @@ void StartComputation() {
   for (int i = 0; i < num_threads; i++) {
     if (i & 1) {
       reluArr[i] = new ReLUFieldProtocol<sci::NetIO, intType>(
-          3 - party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod, otpackArr[i]);
+          3 - party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod,
+          otpackArr[i]);
       maxpoolArr[i] = new MaxPoolProtocol<sci::NetIO, intType>(
-          3 - party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod, otpackArr[i], reluArr[i]);
+          3 - party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod,
+          otpackArr[i], reluArr[i]);
     } else {
       reluArr[i] = new ReLUFieldProtocol<sci::NetIO, intType>(
-          party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod, otpackArr[i]);
+          party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod,
+          otpackArr[i]);
       maxpoolArr[i] = new MaxPoolProtocol<sci::NetIO, intType>(
-          party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod, otpackArr[i], reluArr[i]);
+          party, FIELD, ioArr[i], bitlength, MILL_PARAM, prime_mod,
+          otpackArr[i], reluArr[i]);
     }
   }
 #endif
@@ -1556,7 +1576,8 @@ void StartComputation() {
   std::cout << "-----------Syncronizing-----------" << std::endl;
   io->sync();
   num_rounds = io->num_rounds;
-  std::cout << "secret_share_mod: " << prime_mod << " bitlength: " << bitlength << std::endl;
+  std::cout << "secret_share_mod: " << prime_mod << " bitlength: " << bitlength
+            << std::endl;
   std::cout << "backend: " << backend << std::endl;
   std::cout << "-----------Syncronized - now starting execution-----------"
             << std::endl;
@@ -1775,7 +1796,8 @@ void EndComputation() {
     bool write_title = true;
     {
       std::fstream result(file_addr.c_str(), std::fstream::in);
-      if (result.is_open()) write_title = false;
+      if (result.is_open())
+        write_title = false;
       result.close();
     }
     std::fstream result(file_addr.c_str(),
@@ -1860,8 +1882,8 @@ void ElemWiseVectorPublicDiv(int32_t s1, intType *arr1, int32_t divisor,
   intType *inp;
   intType *out;
   const int alignment = 8;
-  size_t aligned_size = (s1 + alignment - 1) &
-                        -alignment;  // rounding up to multiple of alignment
+  size_t aligned_size =
+      (s1 + alignment - 1) & -alignment; // rounding up to multiple of alignment
 
   if ((size_t)s1 != aligned_size) {
     inp = new intType[aligned_size];

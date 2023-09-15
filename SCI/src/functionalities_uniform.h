@@ -114,8 +114,9 @@ signedIntType funcReconstruct2PCCons(intType x, int revealParty) {
     io->recv_data(&temp, sizeof(intType));
     temp = temp + x;
     if (!isNativeRing) {
-      temp = sci::neg_mod(temp, (int64_t)prime_mod); // cast temp to signed int and
-                                                     // then take a proper modulo p
+      temp =
+          sci::neg_mod(temp, (int64_t)prime_mod); // cast temp to signed int and
+                                                  // then take a proper modulo p
       ans = getAnyRingSignedVal(temp);
     } else {
       ans = getSignedVal(temp & moduloMask);
@@ -192,27 +193,35 @@ intType funcSigendDivIdeal(intType x, uint32_t y) {
 }
 
 void funcReLUThread(int tid, intType *outp, intType *inp, int numRelu,
-                    uint8_t *drelu_res = nullptr, bool skip_ot = false) {
-  reluArr[tid]->relu(outp, inp, numRelu, drelu_res, skip_ot);
+                    uint8_t *drelu_res = nullptr, bool skip_ot = false,
+                    bool doTrunc = false, bool approx = true) {
+  reluArr[tid]->relu(outp, inp, numRelu, drelu_res, skip_ot,
+                     /*do_trunc*/ doTrunc, /*approx*/ approx);
 }
 
-void funcMaxpoolThread(int tid, int rows, int cols, intType *inpArr, intType *maxi, intType *maxiIdx) {
+void funcMaxpoolThread(int tid, int rows, int cols, intType *inpArr,
+                       intType *maxi, intType *maxiIdx) {
   maxpoolArr[tid]->funcMaxMPC(rows, cols, inpArr, maxi, maxiIdx);
 }
 
 #ifdef SCI_OT
-void funcTruncateThread(int tid, int32_t size, intType *inpArr, intType *outpArr, int32_t scalingF, int32_t bw, bool isSigned, uint8_t *msb) {
-  truncationArr[tid]->truncate(size, inpArr, outpArr, scalingF, bw, isSigned, msb);
+void funcTruncateThread(int tid, int32_t size, intType *inpArr,
+                        intType *outpArr, int32_t scalingF, int32_t bw,
+                        bool isSigned, uint8_t *msb) {
+  truncationArr[tid]->truncate(size, inpArr, outpArr, scalingF, bw, isSigned,
+                               msb);
 }
 
 #if USE_CHEETAH
-void funcReLUTruncateThread(int tid, int32_t size, intType *inpArr, intType *outpArr, int32_t scalingF, int32_t bw, bool isSigned) {
-  truncationArr[tid]->truncate_msb0(size, inpArr, outpArr, scalingF, bw, isSigned);
+void funcReLUTruncateThread(int tid, int32_t size, intType *inpArr,
+                            intType *outpArr, int32_t scalingF, int32_t bw,
+                            bool isSigned) {
+  truncationArr[tid]->truncate_msb0(size, inpArr, outpArr, scalingF, bw,
+                                    isSigned);
 }
 #endif
 
 #endif
-
 
 #ifdef SCI_OT
 void funcMatmulThread(int tid, int N, int s1, int s2, int s3, intType *A,
@@ -222,8 +231,7 @@ void funcMatmulThread(int tid, int N, int s1, int s2, int s3, intType *A,
   int s2StartIdx = tid * bucket_size;                   // Inclusive
   int s2EndIdx = std::min((tid + 1) * bucket_size, s2); // Exclusive
 
-
-  if(s2StartIdx == s2EndIdx || s2StartIdx > s2){
+  if (s2StartIdx == s2EndIdx || s2StartIdx > s2) {
     memset(C, 0, s1 * s3 * sizeof(intType));
     return;
   }
@@ -471,7 +479,9 @@ void funcTruncateTwoPowerRing(int curParty, sci::NetIO *curio,
 }
 
 #ifdef SCI_OT
-void funcTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp, int consSF, int bw, bool isSigned, uint8_t *msbShare) {
+void funcTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp,
+                                     int consSF, int bw, bool isSigned,
+                                     uint8_t *msbShare) {
   assert(size % 8 == 0);
 #ifdef MULTITHREADED_TRUNC
   std::thread truncThreads[num_threads];
@@ -492,7 +502,9 @@ void funcTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp, int 
     if (msbShare != nullptr)
       msbShareArg = msbShareArg + offset;
 
-    truncThreads[i] = std::thread(funcTruncateThread, i, curSize, inp + offset, outp + offset, consSF, bw, isSigned, msbShareArg);
+    truncThreads[i] =
+        std::thread(funcTruncateThread, i, curSize, inp + offset, outp + offset,
+                    consSF, bw, isSigned, msbShareArg);
   }
   for (int i = 0; i < num_threads; ++i) {
     truncThreads[i].join();
@@ -505,7 +517,9 @@ void funcTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp, int 
 
 #ifdef SCI_OT
 #if USE_CHEETAH
-void funcReLUTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp, int consSF, int32_t bw, bool isSigned) {
+void funcReLUTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp,
+                                         int consSF, int32_t bw,
+                                         bool isSigned) {
   assert(size % 8 == 0);
 #ifdef MULTITHREADED_TRUNC
   std::thread truncThreads[num_threads];
@@ -522,7 +536,9 @@ void funcReLUTruncateTwoPowerRingWrapper(int size, intType *inp, intType *outp, 
     if (i & 1)
       curParty = 3 - curParty;
 
-    truncThreads[i] = std::thread(funcReLUTruncateThread, i, curSize, inp + offset, outp + offset, consSF, bw, isSigned);
+    truncThreads[i] =
+        std::thread(funcReLUTruncateThread, i, curSize, inp + offset,
+                    outp + offset, consSF, bw, isSigned);
   }
   for (int i = 0; i < num_threads; ++i) {
     truncThreads[i].join();
@@ -887,7 +903,8 @@ void funcFieldDiv(int curParty, sci::NetIO *curio,
   }
 
   static const int fieldBits = std::ceil(std::log2(prime_mod));
-  const uint64_t bitsForA = std::ceil(std::log2(6 * divisor)); // delta in Algorithm 9.
+  const uint64_t bitsForA =
+      std::ceil(std::log2(6 * divisor)); // delta in Algorithm 9.
   const uint64_t totalBitlen = fieldBits + bitsForA;
   bool OT1oo4FitsIn64Bits = (totalBitlen <= 64);
 
@@ -901,7 +918,8 @@ void funcFieldDiv(int curParty, sci::NetIO *curio,
 
   if (curParty == sci::ALICE) {
     curPrgInstance->random_mod_p<intType>(localShareCorr, size, prime_mod);
-    curPrgInstance->random_data(localShareCorrSmallRingPacked, totalRandomBytesForSmallRing);
+    curPrgInstance->random_data(localShareCorrSmallRingPacked,
+                                totalRandomBytesForSmallRing);
     for (int i = 0; i < size; i++) {
       localShareCorrSmallRing[i] = sci::readFromPackedArr(
           localShareCorrSmallRingPacked, totalRandomBytesForSmallRing,

@@ -22,10 +22,10 @@ SOFTWARE.
 #ifndef RELU_FIELD_H__
 #define RELU_FIELD_H__
 
+#include "BuildingBlocks/aux-protocols.h"
 #include "Millionaire/millionaire.h"
 #include "NonLinear/drelu-field.h"
 #include "NonLinear/relu-interface.h"
-#include "BuildingBlocks/aux-protocols.h"
 #include "utils/performance.h"
 
 #define FIELD 1
@@ -37,7 +37,7 @@ public:
   sci::OTPack<IO> *otpack = nullptr;
   TripleGenerator<IO> *triple_gen = nullptr;
   DReLUFieldProtocol<IO> *relu_triple_compare_oracle = nullptr;
-  AuxProtocols* aux;
+  AuxProtocols *aux;
   int party;
   int algeb_str;
   int l, b;
@@ -140,7 +140,8 @@ public:
   }
 
   void relu(type *result, type *share, int num_relu,
-            uint8_t *drelu_res = nullptr, bool skip_ot = false) {
+            uint8_t *drelu_res = nullptr, bool skip_ot = false,
+            bool do_trunc = false, bool approximated = false) {
     uint8_t *drelu_ans = new uint8_t[num_relu];
     drelu(drelu_ans, (uint64_t *)share, num_relu);
     if (drelu_res != nullptr) {

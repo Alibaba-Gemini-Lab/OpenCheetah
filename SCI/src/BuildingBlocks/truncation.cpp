@@ -175,7 +175,7 @@ void Truncation::div_pow2(int32_t dim, uint64_t *inA, uint64_t *outB,
 #if !USE_CHEETAH
 void Truncation::truncate(int32_t dim, uint64_t *inA, uint64_t *outB,
                           int32_t shift, int32_t bw, bool signed_arithmetic,
-                          uint8_t *msb_x) {
+                          uint8_t *msb_x, bool _dummy) {
   if (shift == 0) {
     memcpy(outB, inA, sizeof(uint64_t) * dim);
     return;

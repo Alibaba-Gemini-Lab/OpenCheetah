@@ -27,12 +27,15 @@ SOFTWARE.
 #include "Millionaire/millionaire.h"
 #include "NonLinear/relu-interface.h"
 
+extern int32_t bitlength;
+extern int32_t kScale;
+
 #define RING 0
 #define OFF_PLACE
 
 template <typename IO, typename type>
 class ReLURingProtocol : public ReLUProtocol<IO, type> {
- public:
+public:
   IO *io = nullptr;
   sci::OTPack<IO> *otpack;
   TripleGenerator<IO> *triple_gen = nullptr;
@@ -76,7 +79,7 @@ class ReLURingProtocol : public ReLUProtocol<IO, type> {
       mask_l = (type)((1ULL << l) - 1);
     } else if (this->l == 32) {
       mask_l = -1;
-    } else {  // l = 64
+    } else { // l = 64
       mask_l = -1ULL;
     }
     if (sizeof(type) == sizeof(uint64_t)) {
@@ -135,12 +138,12 @@ class ReLURingProtocol : public ReLUProtocol<IO, type> {
   }
 
   void relu(type *result, type *share, int num_relu,
-            uint8_t *drelu_res = nullptr, bool skip_ot = false) {
+            uint8_t *drelu_res = nullptr, bool skip_ot = false,
+            bool do_trunc = false, bool approx = false) {
     uint8_t *msb_local_share = new uint8_t[num_relu];
     uint64_t *array64;
     type *array_type;
     array64 = new uint64_t[num_relu];
-    array_type = new type[num_relu];
 
     if (this->algeb_str == RING) {
       this->num_cmps = num_relu;
@@ -148,6 +151,65 @@ class ReLURingProtocol : public ReLUProtocol<IO, type> {
       abort();
     }
     uint8_t *wrap = new uint8_t[num_cmps];
+
+    if (approx) {
+      // NOTE(lwj): we don't drop too much for double width fixed-point.
+      int lo = do_trunc ? kScale * 3 / 2 : kScale;
+      int this_l = bitlength - lo;
+      // NOTE(lwj): we can also drop some high-order bits
+      this_l -= ((this_l - 1) % this->b);
+
+      type _mask = (1 << this_l) - 1;
+      type _upper = 1 << (this_l - 1);
+      // x0, x1 \in [0, 2^l)
+      // x'0, x'1 \in [0, 2^k)
+      for (int i = 0; i < num_relu; i++) {
+        array64[i] = static_cast<uint64_t>((share[i] >> lo) & _mask);
+
+        msb_local_share[i] =
+            static_cast<uint8_t>((array64[i] >> (this_l - 1)) & 1);
+
+        if (party == sci::BOB) {
+          array64[i] = (_upper - array64[i]) & _mask;
+        }
+      }
+
+      if (do_trunc) {
+        printf("Mill dotrunc %d on %d bits using b = %d\n", do_trunc,
+               this_l - 1, this->b);
+      }
+
+      this->millionaire->compare(wrap, array64, num_cmps, this_l - 1, true,
+                                 false, this->b);
+
+      for (int i = 0; i < num_relu; i++) {
+        msb_local_share[i] = (msb_local_share[i] + wrap[i]) % two_small;
+      }
+
+      if (drelu_res != nullptr) {
+        for (int i = 0; i < num_relu; i++) {
+          drelu_res[i] = msb_local_share[i];
+        }
+      }
+
+      if (party == sci::ALICE) {
+        for (int i = 0; i < num_relu; i++) {
+          msb_local_share[i] = msb_local_share[i] ^ 1;
+        }
+      }
+
+      aux->multiplexer(msb_local_share, share, result, num_relu, this->l,
+                       this->l);
+
+      delete[] msb_local_share;
+      delete[] wrap;
+
+      io->flush();
+      return;
+    }
+    ///------------///
+
+    array_type = new type[num_relu];
     for (int i = 0; i < num_relu; i++) {
       msb_local_share[i] = (uint8_t)(share[i] >> (l - 1));
       array_type[i] = share[i] & cut_mask_type;
@@ -156,22 +218,24 @@ class ReLURingProtocol : public ReLUProtocol<IO, type> {
     type temp;
 
     switch (this->party) {
-      case sci::ALICE: {
-        for (int i = 0; i < num_relu; i++) {
-          array64[i] = array_type[i] + 0ULL;
-        }
-        break;
+    case sci::ALICE: {
+      for (int i = 0; i < num_relu; i++) {
+        array64[i] = array_type[i] + 0ULL;
       }
-      case sci::BOB: {
-        for (int i = 0; i < num_relu; i++) {
-          temp = this->relu_comparison_rhs_type -
-                 array_type[i];  // This value is never negative.
-          array64[i] = 0ULL + temp;
-        }
-        break;
+      break;
+    }
+    case sci::BOB: {
+      for (int i = 0; i < num_relu; i++) {
+        temp = this->relu_comparison_rhs_type -
+               array_type[i]; // This value is never negative.
+        array64[i] = 0ULL + temp;
       }
+      break;
+    }
     }
 
+    // DRelu(x) = 1 ^ msb(x)
+    //          = 1 ^ msb(x0) ^ msb(x1) ^ 1(x0 + x1 > 2^{l - 1})
     this->millionaire->compare(wrap, array64, num_cmps, l - 1, true, false, b);
     for (int i = 0; i < num_relu; i++) {
       msb_local_share[i] = (msb_local_share[i] + wrap[i]) % two_small;
@@ -200,28 +264,26 @@ class ReLURingProtocol : public ReLUProtocol<IO, type> {
     uint64_t *received_shares = new uint64_t[num_relu];
     this->triple_gen->prg->random_data(additive_masks, num_relu * sizeof(type));
     switch (this->party) {
-      case sci::ALICE: {
-        for (int i = 0; i < num_relu; i++) {
-          set_relu_end_ot_messages(ot_messages[i], share + i,
-                                   msb_local_share + i,
-                                   ((type *)additive_masks) + i);
-        }
-        otpack->iknp_straight->send(ot_messages, num_relu, this->l);
-        otpack->iknp_reversed->recv(received_shares, msb_local_share, num_relu,
-                                    this->l);
-        break;
+    case sci::ALICE: {
+      for (int i = 0; i < num_relu; i++) {
+        set_relu_end_ot_messages(ot_messages[i], share + i, msb_local_share + i,
+                                 ((type *)additive_masks) + i);
       }
-      case sci::BOB: {
-        for (int i = 0; i < num_relu; i++) {
-          set_relu_end_ot_messages(ot_messages[i], share + i,
-                                   msb_local_share + i,
-                                   ((type *)additive_masks) + i);
-        }
-        otpack->iknp_straight->recv(received_shares, msb_local_share, num_relu,
-                                    this->l);
-        otpack->iknp_reversed->send(ot_messages, num_relu, this->l);
-        break;
+      otpack->iknp_straight->send(ot_messages, num_relu, this->l);
+      otpack->iknp_reversed->recv(received_shares, msb_local_share, num_relu,
+                                  this->l);
+      break;
+    }
+    case sci::BOB: {
+      for (int i = 0; i < num_relu; i++) {
+        set_relu_end_ot_messages(ot_messages[i], share + i, msb_local_share + i,
+                                 ((type *)additive_masks) + i);
       }
+      otpack->iknp_straight->recv(received_shares, msb_local_share, num_relu,
+                                  this->l);
+      otpack->iknp_reversed->send(ot_messages, num_relu, this->l);
+      break;
+    }
     }
     for (int i = 0; i < num_relu; i++) {
       result[i] = ((type *)additive_masks)[i] +
@@ -268,4 +330,4 @@ class ReLURingProtocol : public ReLUProtocol<IO, type> {
   }
 };
 
-#endif  // RELU_RING_H__
+#endif // RELU_RING_H__
