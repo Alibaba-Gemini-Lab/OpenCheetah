@@ -18,6 +18,8 @@ void Truncation::truncate(int32_t dim, uint64_t *inA, uint64_t *outB,
       ((bw - shift) == 64 ? -1 : ((1ULL << (bw - shift)) - 1));
 
   if (apply_msb0_heuristic) {
+    // Ref "Secure evaluation of quantized neural networks"
+    // https://eprint.iacr.org/2019/131.pdf
     if (party == sci::BOB) {
       const int m = bw - 3;
       std::vector<uint64_t> adjust(dim);

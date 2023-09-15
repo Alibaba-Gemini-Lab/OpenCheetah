@@ -153,6 +153,10 @@ public:
     uint8_t *wrap = new uint8_t[num_cmps];
 
     if (approx) {
+      // clang-format off
+      // Ref: Kiwan Maeng and G. Edward Suh.
+      // "Approximating ReLU on a Reduced Ring for Efficient MPC-based Private Inference"
+      // clang-format on
       // NOTE(lwj): we don't drop too much for double width fixed-point.
       int lo = do_trunc ? kScale * 3 / 2 : kScale;
       int this_l = bitlength - lo;
