@@ -10,8 +10,8 @@
 
 #define VERIFY_LAYERWISE
 #define LOG _LAYERWISE
-//#undef VERIFY_LAYERWISE // undefine this to turn OFF the verifcation
-//#undef LOG_LAYERWISE // undefine this to turn OFF the log
+// #undef VERIFY_LAYERWISE // undefine this to turn OFF the verifcation
+// #undef LOG_LAYERWISE // undefine this to turn OFF the log
 
 #ifndef SCI_OT
 extern int64_t getSignedVal(uint64_t x);
@@ -24,7 +24,8 @@ extern uint64_t moduloMidPt;
 static inline int64_t getSignedVal(uint64_t x) {
   assert(x < prime_mod);
   int64_t sx = x;
-  if (x >= moduloMidPt) sx = x - prime_mod;
+  if (x >= moduloMidPt)
+    sx = x - prime_mod;
   return sx;
 }
 
@@ -190,9 +191,9 @@ void MatMul2D(int32_t d0, int32_t d1, int32_t d2, const intType *mat_A,
           if (pass) {
             std::cout << gnd << " => " << cmp << "\n";
           }
-		  if (pass && std::abs(gnd - cmp) > 1) {
+          if (pass && std::abs(gnd - cmp) > 1) {
             pass = false;
-		  }
+          }
         }
       }
     }
@@ -256,14 +257,13 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
   meta.stride = strideH;
   meta.is_shared_input = kIsSharedInput;
 
-  printf(
-      "HomConv #%d called N=%ld, H=%ld, W=%ld, CI=%ld, FH=%ld, FW=%ld, "
-      "CO=%ld, S=%ld, Padding %s (%d %d %d %d)\n",
-      ctr++, N, meta.ishape.height(), meta.ishape.width(),
-      meta.ishape.channels(), meta.fshape.height(), meta.fshape.width(),
-      meta.n_filters, meta.stride,
-      (meta.padding == gemini::Padding::VALID ? "VALID" : "SAME"), zPadHLeft,
-      zPadHRight, zPadWLeft, zPadWRight);
+  printf("HomConv #%d called N=%ld, H=%ld, W=%ld, CI=%ld, FH=%ld, FW=%ld, "
+         "CO=%ld, S=%ld, Padding %s (%d %d %d %d)\n",
+         ctr++, N, meta.ishape.height(), meta.ishape.width(),
+         meta.ishape.channels(), meta.fshape.height(), meta.fshape.width(),
+         meta.n_filters, meta.stride,
+         (meta.padding == gemini::Padding::VALID ? "VALID" : "SAME"), zPadHLeft,
+         zPadHRight, zPadWLeft, zPadWRight);
 
 #ifdef LOG_LAYERWISE
   const int64_t io_counter = cheetah_linear->io_counter();
@@ -318,7 +318,7 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
       }
     }
   }
-#endif  // SCI_HE
+#endif // SCI_HE
 
   if (party == SERVER) {
     funcReconstruct2PCCons(nullptr, inputArr, N * H * W * CI);
@@ -379,7 +379,8 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
       for (int j = 0; j < newH; j++) {
         for (int k = 0; k < newW; k++) {
           for (int p = 0; p < CO; p++) {
-            int64_t gnd = Arr4DIdxRowM(VoutputArr, N, newH, newW, CO, i, j, k, p);
+            int64_t gnd =
+                Arr4DIdxRowM(VoutputArr, N, newH, newW, CO, i, j, k, p);
             int64_t cmp = getSignedVal(VoutputVec[i][j][k][p]);
             int64_t diff = gnd - cmp;
 
@@ -387,17 +388,17 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
 
               if (diff > 0 && pos_one < 2) {
                 std::cout << "expect " << gnd << " but got " << cmp << "\n";
-              } 
+              }
 
-			  if (diff < 0 && neg_one < 2) {
+              if (diff < 0 && neg_one < 2) {
                 std::cout << "expect " << gnd << " but got " << cmp << "\n";
               }
 
               pos_one += (diff > 0);
               neg_one += (diff < 0);
-			  if (pass && std::abs(diff) > 1) {
-				pass = false;
-			  }
+              if (pass && std::abs(diff) > 1) {
+                pass = false;
+              }
               ++err_cnt;
             }
           }
@@ -409,20 +410,21 @@ void Conv2DWrapper(signedIntType N, signedIntType H, signedIntType W,
       std::cout << GREEN << "Convolution Output Matches" << RESET << std::endl;
     } else {
       std::cout << RED << "Convolution Output Mismatch" << RESET << std::endl;
-      printf("Error count %d (%d +1, %d -1). %f\%\n", err_cnt, pos_one,
-             neg_one, static_cast<double>(err_cnt) * 100. / (N * newH * newW * CO));
+      printf("Error count %d (%d +1, %d -1). %f\%\n", err_cnt, pos_one, neg_one,
+             static_cast<double>(err_cnt) * 100. / (N * newH * newW * CO));
     }
 
     delete[] VinputArr;
     delete[] VfilterArr;
     delete[] VoutputArr;
   }
-#endif  // VERIFY_LAYERWISE
+#endif // VERIFY_LAYERWISE
 }
 
 void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C,
                const intType *inputArr, const intType *scales,
                const intType *bias, intType *outArr) {
+  CountElementMul += (B * H * W * C);
 #ifdef LOG_LAYERWISE
   INIT_ALL_IO_DATA_SENT;
   INIT_TIMER;
@@ -485,6 +487,7 @@ void BatchNorm(int32_t B, int32_t H, int32_t W, int32_t C,
 
 void ElemWiseActModelVectorMult(int32_t size, intType *inArr,
                                 intType *multArrVec, intType *outputArr) {
+  CountElementMul += size;
 #ifdef LOG_LAYERWISE
   INIT_ALL_IO_DATA_SENT;
   INIT_TIMER;
