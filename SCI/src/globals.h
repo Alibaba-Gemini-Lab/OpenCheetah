@@ -26,12 +26,12 @@ SOFTWARE.
 #include "NonLinear/argmax.h"
 #include "NonLinear/maxpool.h"
 #include "NonLinear/relu-interface.h"
+#include "OT/kkot.h"
 #include "defines.h"
 #include "defines_uniform.h"
 #include <chrono>
 #include <cstdint>
 #include <thread>
-#include "OT/kkot.h"
 #ifdef SCI_OT
 #include "BuildingBlocks/aux-protocols.h"
 #include "BuildingBlocks/truncation.h"
@@ -41,9 +41,9 @@ SOFTWARE.
 #endif
 // Additional Headers for Athos
 #ifdef SCI_HE
+#include "LinearHE/conv-field.h"
 #include "LinearHE/elemwise-prod-field.h"
 #include "LinearHE/fc-field.h"
-#include "LinearHE/conv-field.h"
 #endif
 
 #if USE_CHEETAH
@@ -146,6 +146,8 @@ extern uint64_t TanhCommSent;
 extern uint64_t SqrtCommSent;
 extern uint64_t NormaliseL2CommSent;
 extern uint64_t ArgMaxCommSent;
+
+extern uint64_t CountElementMul;
 #endif
 
 #endif // GLOBALS_H__

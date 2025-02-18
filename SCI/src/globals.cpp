@@ -69,7 +69,8 @@ ReLUProtocol<sci::NetIO, intType> *reluArr[MAX_THREADS];
 MaxPoolProtocol<sci::NetIO, intType> *maxpoolArr[MAX_THREADS];
 // Additional classes for Athos
 #ifdef SCI_OT
-MatMulUniform<sci::NetIO, intType, sci::IKNP<sci::NetIO>> *multUniformArr[MAX_THREADS];
+MatMulUniform<sci::NetIO, intType, sci::IKNP<sci::NetIO>>
+    *multUniformArr[MAX_THREADS];
 #endif
 sci::IKNP<sci::NetIO> *otInstanceArr[MAX_THREADS];
 sci::KKOT<sci::NetIO> *kkotInstanceArr[MAX_THREADS];
@@ -113,4 +114,6 @@ uint64_t TanhCommSent = 0;
 uint64_t SqrtCommSent = 0;
 uint64_t NormaliseL2CommSent = 0;
 uint64_t ArgMaxCommSent = 0;
+
+uint64_t CountElementMul = 0;
 #endif

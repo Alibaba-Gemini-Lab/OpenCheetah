@@ -7,6 +7,7 @@
 #include <math.h>
 
 #include <algorithm>
+#include <atomic>
 #include <stdexcept>
 
 #include "OT/ot-utils.h"
@@ -16,57 +17,58 @@
 
 namespace cheetah {
 
-template <typename IO>
-class SilentOT : public sci::OT<SilentOT<IO>> {
- public:
-  FerretCOT<IO>* ferret;
+template <typename IO> class SilentOT : public sci::OT<SilentOT<IO>> {
+  std::atomic<int64_t> count_rcot_;
+
+public:
+  FerretCOT<IO> *ferret;
   cheetah::MITCCRH<8> mitccrh;
 
-  SilentOT(int party, int threads, IO** ios, bool malicious = false,
+  SilentOT(int party, int threads, IO **ios, bool malicious = false,
            bool run_setup = true, std::string pre_file = "",
            bool warm_up = true) {
-    ferret = new FerretCOT<IO>(party, threads, ios, malicious, run_setup, pre_file);
+    ferret =
+        new FerretCOT<IO>(party, threads, ios, malicious, run_setup, pre_file);
     if (warm_up) {
       block tmp;
       ferret->rcot(&tmp, 1);
     }
+    count_rcot_ = 0;
   }
 
   ~SilentOT() { delete ferret; }
 
-  void send_impl(const block* data0, const block* data1, int64_t length) {
+  void send_impl(const block *data0, const block *data1, int64_t length) {
     send_ot_cm_cc(data0, data1, length);
   }
 
-  void recv_impl(block* data, const bool* b, int64_t length) {
+  void recv_impl(block *data, const bool *b, int64_t length) {
     recv_ot_cm_cc(data, b, length);
   }
 
-  template <typename T>
-  void send_impl(T** data, int length, int l) {
+  template <typename T> void send_impl(T **data, int length, int l) {
     send_ot_cm_cc(data, length, l);
   }
 
   template <typename T>
-  void recv_impl(T* data, const uint8_t* b, int length, int l) {
+  void recv_impl(T *data, const uint8_t *b, int length, int l) {
     recv_ot_cm_cc(data, b, length, l);
   }
 
-  template <typename T>
-  void send_impl(T** data, int length, int N, int l) {
+  template <typename T> void send_impl(T **data, int length, int N, int l) {
     send_ot_cm_cc(data, length, N, l);
   }
 
   template <typename T>
-  void recv_impl(T* data, const uint8_t* b, int length, int N, int l) {
+  void recv_impl(T *data, const uint8_t *b, int length, int N, int l) {
     recv_ot_cm_cc(data, b, length, N, l);
   }
 
-  void send_cot(uint64_t* data0, const uint64_t* corr, int length, int l) {
+  void send_cot(uint64_t *data0, const uint64_t *corr, int length, int l) {
     send_ot_cam_cc(data0, corr, length, l);
   }
 
-  void recv_cot(uint64_t* data, const bool* b, int length, int l) {
+  void recv_cot(uint64_t *data, const bool *b, int length, int l) {
     recv_ot_cam_cc(data, b, length, l);
   }
 
@@ -74,11 +76,12 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   // Sender chooses one message 'corr'. A correlation is defined by the addition
   // function: f(x) = x + corr Sender receives a random message 'x' as output
   // ('data0').
-  void send_ot_cam_cc(uint64_t* data0, const uint64_t* corr, int64_t length,
+  void send_ot_cam_cc(uint64_t *data0, const uint64_t *corr, int64_t length,
                       int l) {
     uint64_t modulo_mask = (1ULL << l) - 1;
-    if (l == 64) modulo_mask = -1;
-    block* rcm_data = new block[length];
+    if (l == 64)
+      modulo_mask = -1;
+    block *rcm_data = new block[length];
     send_ot_rcm_cc(rcm_data, length);
 
     block s;
@@ -122,11 +125,12 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   // chosen additive message, chosen choice
   // Receiver chooses a choice bit 'b', and
   // receives 'x' if b = 0, and 'x + corr' if b = 1
-  void recv_ot_cam_cc(uint64_t* data, const bool* b, int64_t length, int l) {
+  void recv_ot_cam_cc(uint64_t *data, const bool *b, int64_t length, int l) {
     uint64_t modulo_mask = (1ULL << l) - 1;
-    if (l == 64) modulo_mask = -1;
+    if (l == 64)
+      modulo_mask = -1;
 
-    block* rcm_data = new block[length];
+    block *rcm_data = new block[length];
     recv_ot_rcm_cc(rcm_data, b, length);
     block s;
     ferret->io->recv_block(&s, 1);
@@ -165,8 +169,8 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   }
 
   // chosen message, chosen choice
-  void send_ot_cm_cc(const block* data0, const block* data1, int64_t length) {
-    block* data = new block[length];
+  void send_ot_cm_cc(const block *data0, const block *data1, int64_t length) {
+    block *data = new block[length];
     send_ot_rcm_cc(data, length);
 
     block s;
@@ -190,13 +194,14 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
         pad[2 * (j - i)] = pad[2 * (j - i)] ^ data0[j];
         pad[2 * (j - i) + 1] = pad[2 * (j - i) + 1] ^ data1[j];
       }
-      ferret->io->send_data(pad, 2 * sizeof(block) * std::min(ot_bsize, length - i));
+      ferret->io->send_data(pad,
+                            2 * sizeof(block) * std::min(ot_bsize, length - i));
     }
     delete[] data;
   }
 
   // chosen message, chosen choice
-  void recv_ot_cm_cc(block* data, const bool* r, int64_t length) {
+  void recv_ot_cm_cc(block *data, const bool *r, int64_t length) {
     recv_ot_rcm_cc(data, r, length);
 
     block s;
@@ -209,7 +214,8 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     for (int64_t i = 0; i < length; i += ot_bsize) {
       memcpy(pad, data + i, std::min(ot_bsize, length - i) * sizeof(block));
       ferret->mitccrh.template hash<ot_bsize, 1>(pad);
-      ferret->io->recv_data(res, 2 * sizeof(block) * std::min(ot_bsize, length - i));
+      ferret->io->recv_data(res,
+                            2 * sizeof(block) * std::min(ot_bsize, length - i));
       for (int64_t j = 0; j < ot_bsize and j < length - i; ++j) {
         data[i + j] = res[2 * j + r[i + j]] ^ pad[j];
       }
@@ -220,9 +226,8 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   // Here, the 2nd dim of data is always 2. We use T** instead of T*[2] or two
   // arguments of T*, in order to be general and compatible with the API of
   // 1-out-of-N OT.
-  template <typename T>
-  void send_ot_cm_cc(T** data, int64_t length, int l) {
-    block* rcm_data = new block[length];
+  template <typename T> void send_ot_cm_cc(T **data, int64_t length, int l) {
+    block *rcm_data = new block[length];
     send_ot_rcm_cc(rcm_data, length);
 
     block s;
@@ -248,11 +253,11 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
       // https://stackoverflow.com/questions/7397934/calling-template-function-within-template-class
       ferret->mitccrh.template hash<ot_bsize, 2>(pad);
 
-      corrected_y_size = (uint32_t)ceil((2 * std::min(ot_bsize, length - i) * l) /
-                                        ((float)sizeof(T) * 8));
+      corrected_y_size = (uint32_t)ceil(
+          (2 * std::min(ot_bsize, length - i) * l) / ((float)sizeof(T) * 8));
       corrected_bsize = std::min(ot_bsize, length - i);
 
-      sci::pack_ot_messages<T>((T*)y, data + i, pad, corrected_y_size,
+      sci::pack_ot_messages<T>((T *)y, data + i, pad, corrected_y_size,
                                corrected_bsize, l, 2);
 
       ferret->io->send_data(y, sizeof(T) * (corrected_y_size));
@@ -264,9 +269,9 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   // Here, r[i]'s value is always 0 or 1. We use uint8_t instead of bool, in
   // order to be general and compatible with the API of 1-out-of-N OT.
   template <typename T>
-  void recv_ot_cm_cc(T* data, const uint8_t* r, int64_t length, int l) {
-    block* rcm_data = new block[length];
-    recv_ot_rcm_cc(rcm_data, (const bool*)r, length);
+  void recv_ot_cm_cc(T *data, const uint8_t *r, int64_t length, int l) {
+    block *rcm_data = new block[length];
+    recv_ot_rcm_cc(rcm_data, (const bool *)r, length);
 
     block s;
     ferret->io->recv_block(&s, 1);
@@ -290,24 +295,25 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
       memcpy(pad, rcm_data + i, std::min(ot_bsize, length - i) * sizeof(block));
       ferret->mitccrh.template hash<ot_bsize, 1>(pad);
 
-      sci::unpack_ot_messages<T>(data + i, r + i, (T*)recvd, pad,
+      sci::unpack_ot_messages<T>(data + i, r + i, (T *)recvd, pad,
                                  corrected_bsize, l, 2);
     }
     delete[] rcm_data;
   }
 
   // random correlated message, chosen choice
-  void send_ot_rcm_cc(block* data0, int64_t length) {
+  void send_ot_rcm_cc(block *data0, int64_t length) {
     ferret->send_cot(data0, length);
+    count_rcot_.fetch_add(length);
   }
 
   // random correlated message, chosen choice
-  void recv_ot_rcm_cc(block* data, const bool* b, int64_t length) {
+  void recv_ot_rcm_cc(block *data, const bool *b, int64_t length) {
     ferret->recv_cot(data, b, length);
   }
 
   // random message, chosen choice
-  void send_ot_rm_cc(block* data0, block* data1, int64_t length) {
+  void send_ot_rm_cc(block *data0, block *data1, int64_t length) {
     send_ot_rcm_cc(data0, length);
     block s;
     ferret->prg.random_block(&s, 1);
@@ -330,7 +336,7 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   }
 
   // random message, chosen choice
-  void recv_ot_rm_cc(block* data, const bool* r, int64_t length) {
+  void recv_ot_rm_cc(block *data, const bool *r, int64_t length) {
     recv_ot_rcm_cc(data, r, length);
     block s;
     ferret->io->recv_block(&s, 1);
@@ -338,14 +344,16 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     // ferret->io->flush();
     block pad[ot_bsize];
     for (int64_t i = 0; i < length; i += ot_bsize) {
-	  std::memcpy(pad, data + i, std::min(ot_bsize, length - i) * sizeof(block));
+      std::memcpy(pad, data + i,
+                  std::min(ot_bsize, length - i) * sizeof(block));
       ferret->mitccrh.template hash<ot_bsize, 1>(pad);
-	  std::memcpy(data + i, pad, std::min(ot_bsize, length - i) * sizeof(block));
+      std::memcpy(data + i, pad,
+                  std::min(ot_bsize, length - i) * sizeof(block));
     }
   }
 
   // random message, random choice
-  void send_ot_rm_rc(block* data0, block* data1, int64_t length) {
+  void send_ot_rm_rc(block *data0, block *data1, int64_t length) {
     ferret->rcot(data0, length);
 
     block s;
@@ -369,7 +377,7 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   }
 
   // random message, random choice
-  void recv_ot_rm_rc(block* data, bool* r, int64_t length) {
+  void recv_ot_rm_rc(block *data, bool *r, int64_t length) {
     ferret->rcot(data, length);
     for (int64_t i = 0; i < length; i++) {
       r[i] = getLSB(data[i]);
@@ -381,17 +389,19 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     // ferret->io->flush();
     block pad[ot_bsize];
     for (int64_t i = 0; i < length; i += ot_bsize) {
-	  std::memcpy(pad, data + i, std::min(ot_bsize, length - i) * sizeof(block));
+      std::memcpy(pad, data + i,
+                  std::min(ot_bsize, length - i) * sizeof(block));
       ferret->mitccrh.template hash<ot_bsize, 1>(pad);
-	  std::memcpy(data + i, pad, std::min(ot_bsize, length - i) * sizeof(block));
+      std::memcpy(data + i, pad,
+                  std::min(ot_bsize, length - i) * sizeof(block));
     }
   }
 
   // random message, random choice
   template <typename T>
-  void send_ot_rm_rc(T* data0, T* data1, int64_t length, int l) {
-    block* rm_data0 = new block[length];
-    block* rm_data1 = new block[length];
+  void send_ot_rm_rc(T *data0, T *data1, int64_t length, int l) {
+    block *rm_data0 = new block[length];
+    block *rm_data1 = new block[length];
     send_ot_rm_rc(rm_data0, rm_data1, length);
 
     T mask = (T)((1ULL << l) - 1ULL);
@@ -407,8 +417,8 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
 
   // random message, random choice
   template <typename T>
-  void recv_ot_rm_rc(T* data, bool* r, int64_t length, int l) {
-    block* rm_data = new block[length];
+  void recv_ot_rm_rc(T *data, bool *r, int64_t length, int l) {
+    block *rm_data = new block[length];
     recv_ot_rm_rc(rm_data, r, length);
 
     T mask = (T)((1ULL << l) - 1ULL);
@@ -423,11 +433,11 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   // chosen message, chosen choice.
   // One-oo-N OT, where each message has l bits. Here, the 2nd dim of data is N.
   template <typename T>
-  void send_ot_cm_cc(T** data, int64_t length, int N, int l) {
+  void send_ot_cm_cc(T **data, int64_t length, int N, int l) {
     int logN = (int)ceil(log2(N));
 
-    block* rm_data0 = new block[length * logN];
-    block* rm_data1 = new block[length * logN];
+    block *rm_data0 = new block[length * logN];
+    block *rm_data1 = new block[length * logN];
     send_ot_rm_cc(rm_data0, rm_data1, length * logN);
 
     block pad[ot_bsize * N];
@@ -436,9 +446,9 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     uint32_t corrected_y_size, corrected_bsize;
     T y[y_size];
 
-    block* hash_in0 = new block[N - 1];
-    block* hash_in1 = new block[N - 1];
-    block* hash_out = new block[2 * N - 2];
+    block *hash_in0 = new block[N - 1];
+    block *hash_in1 = new block[N - 1];
+    block *hash_out = new block[2 * N - 2];
     int idx = 0;
     for (int x = 0; x < logN; x++) {
       for (int y = 0; y < (1 << x); y++) {
@@ -449,7 +459,7 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     }
 
     for (int64_t i = 0; i < length; i += ot_bsize) {
-	  std::memset(pad, 0, sizeof(block) * N * ot_bsize);
+      std::memset(pad, 0, sizeof(block) * N * ot_bsize);
       for (int64_t j = i; j < std::min(i + ot_bsize, length); ++j) {
         mitccrh.renew_ks(rm_data0 + j * logN, logN);
         mitccrh.hash_exp(hash_out, hash_in0, logN);
@@ -470,11 +480,11 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
         }
       }
 
-      corrected_y_size = (uint32_t)ceil((std::min(ot_bsize, length - i) * N * l) /
-                                        ((float)sizeof(T) * 8));
+      corrected_y_size = (uint32_t)ceil(
+          (std::min(ot_bsize, length - i) * N * l) / ((float)sizeof(T) * 8));
       corrected_bsize = std::min(ot_bsize, length - i);
 
-      sci::pack_ot_messages<T>((T*)y, data + i, pad, corrected_y_size,
+      sci::pack_ot_messages<T>((T *)y, data + i, pad, corrected_y_size,
                                corrected_bsize, l, N);
 
       ferret->io->send_data(y, sizeof(T) * (corrected_y_size));
@@ -491,11 +501,11 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
   // One-oo-N OT, where each message has l bits. Here, r[i]'s value is in [0,
   // N).
   template <typename T>
-  void recv_ot_cm_cc(T* data, const uint8_t* r, int64_t length, int N, int l) {
+  void recv_ot_cm_cc(T *data, const uint8_t *r, int64_t length, int N, int l) {
     int logN = (int)ceil(log2(N));
 
-    block* rm_data = new block[length * logN];
-    bool* b_choices = new bool[length * logN];
+    block *rm_data = new block[length * logN];
+    bool *b_choices = new bool[length * logN];
     for (int64_t i = 0; i < length; i++) {
       for (int64_t j = 0; j < logN; j++) {
         b_choices[i * logN + j] = (bool)((r[i] & (1 << j)) >> j);
@@ -510,8 +520,8 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     uint32_t corrected_recvd_size, corrected_bsize;
     T recvd[recvd_size];
 
-    block* hash_out = new block[logN];
-    block* hash_in = new block[logN];
+    block *hash_out = new block[logN];
+    block *hash_in = new block[logN];
 
     for (int64_t i = 0; i < length; i += ot_bsize) {
       corrected_recvd_size = (uint32_t)ceil(
@@ -520,7 +530,7 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
 
       ferret->io->recv_data(recvd, sizeof(T) * (corrected_recvd_size));
 
-	  std::memset(pad, 0, sizeof(block) * ot_bsize);
+      std::memset(pad, 0, sizeof(block) * ot_bsize);
       for (int64_t j = i; j < std::min(i + ot_bsize, length); ++j) {
         for (int64_t s = 0; s < logN; s++)
           hash_in[s] = makeBlock(r[j] & ((1 << (s + 1)) - 1), 0);
@@ -532,7 +542,7 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
         }
       }
 
-      sci::unpack_ot_messages<T>(data + i, r + i, (T*)recvd, pad,
+      sci::unpack_ot_messages<T>(data + i, r + i, (T *)recvd, pad,
                                  corrected_bsize, l, N);
     }
     delete[] hash_in;
@@ -541,50 +551,50 @@ class SilentOT : public sci::OT<SilentOT<IO>> {
     delete[] b_choices;
   }
 
-  void send_batched_got(uint64_t* data, int num_ot, int l,
+  void send_batched_got(uint64_t *data, int num_ot, int l,
                         int msgs_per_ot = 1) {
     throw std::logic_error("Not implemented");
   }
 
-  void recv_batched_got(uint64_t* data, const uint8_t* r, int num_ot, int l,
+  void recv_batched_got(uint64_t *data, const uint8_t *r, int num_ot, int l,
                         int msgs_per_ot = 1) {
     throw std::logic_error("Not implemented");
   }
 
-  void send_batched_cot(uint64_t* data0, uint64_t* corr,
+  void send_batched_cot(uint64_t *data0, uint64_t *corr,
                         std::vector<int> msg_len, int num_ot,
                         int msgs_per_ot = 1) {
     throw std::logic_error("Not implemented");
   }
 
-  void recv_batched_cot(uint64_t* data, bool* b, std::vector<int> msg_len,
+  void recv_batched_cot(uint64_t *data, bool *b, std::vector<int> msg_len,
                         int num_ot, int msgs_per_ot = 1) {
     throw std::logic_error("Not implemented");
   }
+
+  int64_t get_rcot_count() const { return count_rcot_.load(); }
 };
 
-template <typename IO>
-class SilentOTN : public sci::OT<SilentOTN<IO>> {
- public:
-  SilentOT<IO>* silent_ot;
+template <typename IO> class SilentOTN : public sci::OT<SilentOTN<IO>> {
+public:
+  SilentOT<IO> *silent_ot;
   int N;
 
-  SilentOTN(SilentOT<IO>* silent_ot, int N) {
+  SilentOTN(SilentOT<IO> *silent_ot, int N) {
     this->silent_ot = silent_ot;
     this->N = N;
   }
 
-  template <typename T>
-  void send_impl(T** data, int length, int l) {
+  template <typename T> void send_impl(T **data, int length, int l) {
     silent_ot->send_impl(data, length, N, l);
   }
 
   template <typename T>
-  void recv_impl(T* data, const uint8_t* b, int length, int l) {
+  void recv_impl(T *data, const uint8_t *b, int length, int l) {
     silent_ot->recv_impl(data, b, length, N, l);
   }
 };
 
-}  // namespace cheetah
+} // namespace cheetah
 
 #endif // CHEETAH_SILENT_OT_H

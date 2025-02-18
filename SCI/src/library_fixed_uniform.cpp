@@ -24,6 +24,7 @@ SOFTWARE.
 
 #include "cleartext_library_fixed_uniform.h"
 #include "functionalities_uniform.h"
+#include "globals.h"
 #include "library_fixed_common.h"
 
 #define LOG_LAYERWISE
@@ -545,6 +546,7 @@ void Conv2DGroupWrapper(signedIntType N, signedIntType H, signedIntType W,
 #if !USE_CHEETAH
 void ElemWiseActModelVectorMult(int32_t size, intType *inArr,
                                 intType *multArrVec, intType *outputArr) {
+  CountElementMul += size;
 #ifdef LOG_LAYERWISE
   INIT_ALL_IO_DATA_SENT;
   INIT_TIMER;
@@ -1695,6 +1697,15 @@ void EndComputation() {
             << ((NormaliseL2CommSent) / (1.0 * (1ULL << 20))) << " MiB."
             << std::endl;
   std::cout << "------------------------------------------------------\n";
+#if USE_CHEETAH
+  int64_t rcot = 0;
+  for (size_t i = 0; i < MAX_THREADS; ++i) {
+    rcot += otpackArr[i]->silent_ot->get_rcot_count();
+  }
+  std::cout << "Total #Ferret's RCOT " << rcot << std::endl;
+  std::cout << "Total #Elementwise Mul " << CountElementMul << std::endl;
+  std::cout << "------------------------------------------------------\n";
+#endif
   if (party == SERVER) {
     uint64_t ConvCommSentClient = 0;
     uint64_t MatMulCommSentClient = 0;
